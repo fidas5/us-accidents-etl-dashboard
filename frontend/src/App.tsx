@@ -1,185 +1,89 @@
-import React, { useEffect, useState } from "react";
-import HealthCheck from "./components/HealthCheck";
+// src/App.tsx
+import React from "react";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-import { LogOut, LayoutDashboard, ShieldCheck, Users, Database, Zap } from "lucide-react";
+import DashboardPage from "./pages/Dashboard";
 
-type View = "login" | "register" | "dashboard";
+const Dummy = () => <div>Coming soon...</div>;
 
-const TOKEN_KEY = "access_token";
+function PrivateRoute({ children }: { children: JSX.Element }) {
+  const { token } = useAuth();
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
 
-function App() {
-  const [view, setView] = useState<View>("login");
-  const [token, setToken] = useState<string | null>(null);
+function LoginPageWrapper() {
+  const { login, token } = useAuth();
+  const navigate = useNavigate();
 
-  // Load token on startup
-  useEffect(() => {
-    const stored = localStorage.getItem(TOKEN_KEY);
-    if (stored) {
-      setToken(stored);
-      setView("dashboard");
-    }
-  }, []);
+  // ✅ Already logged in → redirect to dashboard
+  if (token) {
+    return <Navigate to="/" replace />;
+  }
 
-  const handleLoggedIn = (accessToken: string) => {
-    setToken(accessToken);
-    localStorage.setItem(TOKEN_KEY, accessToken);
-    setView("dashboard");
+  const handleLoggedIn = (token: string, email: string) => {
+    login(token, email);
+    navigate("/");
   };
 
-  const handleLogout = () => {
-    setToken(null);
-    localStorage.removeItem(TOKEN_KEY);
-    setView("login");
+  return <LoginPage onLoggedIn={handleLoggedIn} />;
+}
+
+function RegisterPageWrapper() {
+  const { login, token } = useAuth();
+  const navigate = useNavigate();
+
+  // ✅ Already logged in → redirect to dashboard
+  if (token) {
+    return <Navigate to="/" replace />;
+  }
+
+  const handleLoggedIn = (token: string, email: string) => {
+    login(token, email);
+    navigate("/");
   };
 
-  const isAuthenticated = view === "dashboard";
-
+  return <RegisterPage onLoggedIn={handleLoggedIn} />;
+}
+function AppRoutes() {
   return (
-    <div className="app-layout">
-      {/* Sidebar ONLY when authenticated */}
-      {isAuthenticated && (
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <ShieldCheck style={{ marginRight: "0.5rem" }} />
-            US Accidents ETL
-          </div>
-          <ul className="sidebar-nav">
-            <li className="sidebar-nav-item">
-              <span className="sidebar-link active">
-                <LayoutDashboard />
-                <span>Dashboard</span>
-              </span>
-            </li>
-          </ul>
-          <div className="sidebar-footer">
-            <span className="text-sm">Logged in</span>
-            <button className="btn btn-outline" onClick={handleLogout}>
-              <LogOut className="me-2" size={16} /> Sign out
-            </button>
-          </div>
-        </aside>
-      )}
-
-      {/* Main content */}
-      <div className="main-content">
-        {/* Mobile header */}
-        <header className="mobile-header">
-          <div className="flex items-center gap-2">
-            <ShieldCheck />
-            <span className="fw-bold">US Accidents ETL</span>
-          </div>
-          {isAuthenticated && (
-            <button className="btn btn-outline" onClick={handleLogout}>
-              <LogOut className="me-2" size={16} /> Sign out
-            </button>
-          )}
-        </header>
-
-        <main className="page-content">
-          {/* Toggle login/register when NOT authenticated */}
-          {!isAuthenticated && (
-            <div className="text-center mb-4">
-              {view === "login" ? (
-                <p className="text-muted">
-                  Don't have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => setView("register")}
-                    className="btn btn-outline"
-                    style={{ padding: "0.25rem 0.75rem", fontSize: "0.85rem" }}
-                  >
-                    Register here
-                  </button>
-                </p>
-              ) : (
-                <p className="text-muted">
-                  Already have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => setView("login")}
-                    className="btn btn-outline"
-                    style={{ padding: "0.25rem 0.75rem", fontSize: "0.85rem" }}
-                  >
-                    Sign in instead
-                  </button>
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="view-container">
-            {view === "login" && <LoginPage onLoggedIn={handleLoggedIn} />}
-
-            {view === "register" && <RegisterPage onLoggedIn={handleLoggedIn} />}
-
-            {view === "dashboard" && (
-              <div className="dashboard-wrapper">
-                {/* Dashboard Header */}
-                <div className="card" style={{ marginBottom: "1.5rem" }}>
-                  <div className="card-header">
-                    <div className="flex items-center gap-2">
-                      <LayoutDashboard />
-                      <span>Dashboard Overview</span>
-                    </div>
-                  </div>
-                  <div className="card-body">
-                    <p className="text-muted">
-                      Analytics, ETL Jobs & Predictions for US accidents.
-                    </p>
-                  </div>
-                </div>
-
-                {/* KPI + HealthCheck */}
-                <div className="kpi-grid">
-                  <HealthCheck />
-
-                  <div className="card kpi-card">
-                    <div className="kpi-icon blue">
-                      <Users />
-                    </div>
-                    <div className="kpi-content">
-                      <h6>Active Users</h6>
-                      <h3>1</h3>
-                      <p className="text-muted text-sm">
-                        Secure JWT authentication active
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="card kpi-card">
-                    <div className="kpi-icon purple">
-                      <Database />
-                    </div>
-                    <div className="kpi-content">
-                      <h6>ETL Status</h6>
-                      <h3>Ready</h3>
-                      <p className="text-muted text-sm">
-                        PostgreSQL accidents_clean loaded
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="card kpi-card">
-                    <div className="kpi-icon yellow">
-                      <Zap />
-                    </div>
-                    <div className="kpi-content">
-                      <h6>Predictions</h6>
-                      <h3>Live</h3>
-                      <p className="text-muted text-sm">
-                        Random Forest model ready (/predict)
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/login" element={<LoginPageWrapper />} />
+      <Route path="/register" element={<RegisterPageWrapper />} />
+      <Route
+        path="/"
+        element={
+          <PrivateRoute>
+            <Layout />
+          </PrivateRoute>
+        }
+      >
+        <Route index element={<DashboardPage />} />
+        <Route path="etl" element={<Dummy />} />
+        <Route path="data" element={<Dummy />} />
+        <Route path="predict" element={<Dummy />} />
+      </Route>
+    </Routes>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}

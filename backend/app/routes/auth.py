@@ -1,14 +1,14 @@
-# app/routes/auth.py
-
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token
 from flask_mail import Message
-from .. import db, mail
-from ..models import User  # you must have a User model
 import random
 
-auth_bp = Blueprint("auth", __name__)
+from .. import db, mail
+from ..models import User
+
+auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
+
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
@@ -41,8 +41,13 @@ def register():
         )
         mail.send(msg)
     except Exception as e:
-        # Optionally log e
-        return jsonify({"message": "User created but failed to send email", "error": str(e)}), 500
+        # Optionnel : log error e
+        return jsonify(
+            {
+                "message": "User created but failed to send email",
+                "error": str(e),
+            }
+        ), 500
 
     return jsonify({"message": "Verification code sent to your email"}), 201
 
@@ -64,8 +69,15 @@ def verify_email():
     user.verification_code = None
     db.session.commit()
 
-    token = create_access_token(identity=user.id)
-    return jsonify({"access_token": token, "message": "Email verified"}), 200
+    # Identity en string pour éviter "Subject must be a string"
+    access_token = create_access_token(identity=str(user.id))
+
+    return jsonify(
+        {
+            "access_token": access_token,
+            "message": "Email verified",
+        }
+    ), 200
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -84,5 +96,7 @@ def login():
     if not user.is_verified:
         return jsonify({"message": "Please verify your email first"}), 403
 
-    token = create_access_token(identity=user.id)
-    return jsonify({"access_token": token}), 200
+    # Identity en string ici aussi
+    access_token = create_access_token(identity=str(user.id))
+
+    return jsonify({"access_token": access_token}), 200

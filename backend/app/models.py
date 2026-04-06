@@ -32,16 +32,35 @@ class ETLJob(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class AccidentRaw(db.Model):
+    __tablename__ = "accidents_raw"
+
+    id = db.Column(db.Integer, primary_key=True)
+    accident_id = db.Column(db.String(100), index=True)
+    start_time_raw = db.Column(db.String(50))
+    end_time_raw = db.Column(db.String(50))
+    city_raw = db.Column(db.String(100))
+    state_raw = db.Column(db.String(50))
+    severity_raw = db.Column(db.Integer)
+    temperature_raw = db.Column(db.Float)
+    visibility_raw = db.Column(db.Float)
+    weather_condition_raw = db.Column(db.String(100))
+    latitude_raw = db.Column(db.Float)
+    longitude_raw = db.Column(db.Float)
+
 class AccidentClean(db.Model):
+    """
+    Table clean / DataMart : colonnes nettoyées et prêtes pour le dashboard.
+    """
     __tablename__ = "accidents_clean"
 
     id = db.Column(db.Integer, primary_key=True)
     accident_id = db.Column(db.String(100), index=True)
-    start_time = db.Column(db.DateTime)
+    start_time = db.Column(db.DateTime, index=True)
     end_time = db.Column(db.DateTime)
-    severity = db.Column(db.Integer)
-    city = db.Column(db.String(100))
-    state = db.Column(db.String(50))
+    severity = db.Column(db.Integer, index=True)
+    city = db.Column(db.String(100), index=True)
+    state = db.Column(db.String(50), index=True)
     temperature = db.Column(db.Float)
     visibility = db.Column(db.Float)
     weather_condition = db.Column(db.String(100))

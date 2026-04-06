@@ -3,14 +3,16 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from sqlalchemy import text
-from .config import Config
 from flask_cors import CORS
-from flask_mail import Mail  # NEW
+from flask_mail import Mail
+
+from .config import Config
 
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
-mail = Mail()  # NEW
+mail = Mail()
+
 
 def create_app():
     app = Flask(__name__)
@@ -20,14 +22,17 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    mail.init_app(app)  # NEW
+    mail.init_app(app)
 
-    from . import models  # noqa
+    # NE RIEN IMPORTER AVANT ÇA
+    from . import models  # noqa: F401
     from .routes.auth import auth_bp
     from .routes.etl import etl_bp
+    from .routes.stats import stats_bp
 
-    app.register_blueprint(auth_bp, url_prefix="/auth")
-    app.register_blueprint(etl_bp, url_prefix="/etl")
+    app.register_blueprint(auth_bp)   # url_prefix dans auth_bp
+    app.register_blueprint(etl_bp)    # url_prefix dans etl_bp
+    app.register_blueprint(stats_bp)  # url_prefix dans stats_bp
 
     @app.route("/health")
     def health():
