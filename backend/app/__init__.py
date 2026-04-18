@@ -29,10 +29,13 @@ def create_app():
     from .routes.auth import auth_bp
     from .routes.etl import etl_bp
     from .routes.stats import stats_bp
-
+    from .routes.accidents import accidents_bp 
+    from .routes.predict import predict_bp
+    app.register_blueprint(predict_bp)
     app.register_blueprint(auth_bp)   # url_prefix dans auth_bp
     app.register_blueprint(etl_bp)    # url_prefix dans etl_bp
     app.register_blueprint(stats_bp)  # url_prefix dans stats_bp
+    app.register_blueprint(accidents_bp)  # url_prefix dans accidents_bp
 
     @app.route("/health")
     def health():

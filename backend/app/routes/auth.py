@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify , current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token
 from flask_mail import Message
@@ -12,9 +12,16 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
+    print("MAIL_SERVER:", current_app.config.get("MAIL_SERVER"))
+    print("MAIL_PORT:", current_app.config.get("MAIL_PORT"))
+    print("MAIL_USERNAME:", current_app.config.get("MAIL_USERNAME"))
+    print("MAIL_PASSWORD:", current_app.config.get("MAIL_PASSWORD"))
+    print("MAIL_USE_TLS:", current_app.config.get("MAIL_USE_TLS"))
     data = request.get_json() or {}
     email = data.get("email")
     password = data.get("password")
+    nom= data.get("nom")
+    prenom= data.get("prenom")
 
     if not email or not password:
         return jsonify({"message": "Email and password required"}), 400
@@ -29,6 +36,9 @@ def register():
         password_hash=generate_password_hash(password),
         is_verified=False,
         verification_code=code,
+        nom=nom,
+        prenom=prenom
+
     )
     db.session.add(user)
     db.session.commit()
@@ -41,11 +51,12 @@ def register():
         )
         mail.send(msg)
     except Exception as e:
-        # Optionnel : log error e
+        print("MAIL ERROR:", repr(e))  # ← add this
+
         return jsonify(
             {
                 "message": "User created but failed to send email",
-                "error": str(e),
+                "error": repr(e),
             }
         ), 500
 

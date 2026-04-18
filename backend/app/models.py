@@ -12,7 +12,8 @@ class User(db.Model):
     is_verified = db.Column(db.Boolean, default=False)
     verification_code = db.Column(db.String(10), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    nom = db.Column(db.String(100), nullable=True)
+    prenom = db.Column(db.String(100), nullable=True)
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
 

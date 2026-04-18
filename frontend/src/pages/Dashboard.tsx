@@ -1,3 +1,4 @@
+// src/pages/DashboardPage.tsx
 import React from "react";
 import DashboardStats from "../components/DashboardStats";
 import { useAuth } from "../context/AuthContext";
@@ -7,15 +8,19 @@ export default function DashboardPage() {
 
   if (!token) {
     return (
-      <div className="card">
-        <div className="card-body">No auth token</div>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "40vh",
+        color: "#6b7280",
+        fontFamily: "ui-monospace, monospace",
+        fontSize: 13,
+      }}>
+        No authentication token found.
       </div>
     );
   }
 
-  return (
-    <div className="dashboard-wrapper">
-      <DashboardStats token={token} />
-    </div>
-  );
+  return <DashboardStats token={token} />;
 }

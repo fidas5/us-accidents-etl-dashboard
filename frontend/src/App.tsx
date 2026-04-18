@@ -12,8 +12,9 @@ import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/Dashboard";
-
-const Dummy = () => <div>Coming soon...</div>;
+import DataExplorerPage from "./pages/DataExplorer";
+import ETLPage from "./pages/ETLJobs";
+import PredictPage from "./pages/Predictions";
 
 function PrivateRoute({ children }: { children: JSX.Element }) {
   const { token } = useAuth();
@@ -70,9 +71,9 @@ function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
-        <Route path="etl" element={<Dummy />} />
-        <Route path="data" element={<Dummy />} />
-        <Route path="predict" element={<Dummy />} />
+        <Route path="data" element={<DataExplorerPage />} />
+        <Route path="etl" element={<ETLPage />} />
+        <Route path="predict" element={<PredictPage />} />
       </Route>
     </Routes>
   );

@@ -36,7 +36,7 @@ def stats_summary():
             },
         },
     })
-
+ 
 
 @stats_bp.route("/by-severity", methods=["GET"])
 @jwt_required()
