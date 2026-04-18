@@ -3,21 +3,16 @@ import React, { useState } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  LayoutDashboard,
-  Database,
-  Table,
-  BrainCircuit,
-  LogOut,
-  Car,
-  Menu,
-  X,
+  LayoutDashboard, Database, Table, BrainCircuit,
+  LogOut, Car, Menu, Sun, Moon,
 } from "lucide-react";
+import { useTheme } from "../context/ThemeContext";
 
 const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "ETL Jobs", href: "/etl", icon: Database },
-  { name: "Data Explorer", href: "/data", icon: Table },
-  { name: "Predictions", href: "/predict", icon: BrainCircuit },
+  { name: "Dashboard",    href: "/",       icon: LayoutDashboard },
+  { name: "ETL Jobs",     href: "/etl",    icon: Database },
+  { name: "Data Explorer",href: "/data",   icon: Table },
+  { name: "Predictions",  href: "/predict",icon: BrainCircuit },
 ];
 
 export default function Layout() {
@@ -25,11 +20,9 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
+  const handleLogout = () => { logout(); navigate("/login"); };
 
   const isActive = (href: string) =>
     href === "/"
@@ -39,12 +32,11 @@ export default function Layout() {
   return (
     <>
       <style>{`
-        /* ── Layout shell ── */
         .layout-root {
           display: flex;
           height: 100vh;
           overflow: hidden;
-          background: #020617;
+          background: var(--bg-app);
           font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
 
@@ -55,15 +47,14 @@ export default function Layout() {
           display: flex;
           flex-direction: column;
           height: 100vh;
-          background: linear-gradient(180deg, #020a1a 0%, #020617 100%);
-          border-right: 1px solid rgba(30, 58, 138, 0.25);
+          background: var(--bg-sidebar);
+          border-right: 1px solid var(--border);
           padding: 20px 12px;
           position: relative;
           z-index: 20;
           overflow: hidden;
         }
 
-        /* subtle grid texture */
         .sidebar::before {
           content: "";
           position: absolute;
@@ -80,9 +71,9 @@ export default function Layout() {
           align-items: center;
           gap: 10px;
           padding: 6px 10px 20px;
-          border-bottom: 1px solid rgba(30, 58, 138, 0.2);
+          border-bottom: 1px solid var(--border);
           margin-bottom: 12px;
-          color: #e5e7eb;
+          color: var(--text-main);
           font-size: 15px;
           font-weight: 700;
           letter-spacing: -0.3px;
@@ -93,7 +84,7 @@ export default function Layout() {
           width: 32px;
           height: 32px;
           border-radius: 8px;
-          background: rgba(59, 130, 246, 0.15);
+          background: var(--primary-color-soft);
           border: 1px solid rgba(59, 130, 246, 0.3);
           display: flex;
           align-items: center;
@@ -119,7 +110,7 @@ export default function Layout() {
           gap: 10px;
           padding: 9px 12px;
           border-radius: 10px;
-          color: #6b7280;
+          color: var(--text-muted);
           font-size: 13.5px;
           font-weight: 500;
           text-decoration: none;
@@ -129,13 +120,13 @@ export default function Layout() {
         }
 
         .sidebar-link:hover {
-          color: #d1d5db;
-          background: rgba(255,255,255,0.04);
+          color: var(--text-main);
+          background: var(--surface2);
         }
 
         .sidebar-link.active {
           color: #93c5fd;
-          background: rgba(59, 130, 246, 0.12);
+          background: var(--primary-color-soft);
         }
 
         .sidebar-link.active::before {
@@ -146,7 +137,7 @@ export default function Layout() {
           transform: translateY(-50%);
           width: 3px;
           height: 60%;
-          background: #3b82f6;
+          background: var(--primary-color);
           border-radius: 0 3px 3px 0;
         }
 
@@ -160,7 +151,7 @@ export default function Layout() {
         .sidebar-footer {
           position: relative;
           padding-top: 14px;
-          border-top: 1px solid rgba(30, 58, 138, 0.2);
+          border-top: 1px solid var(--border);
           display: flex;
           align-items: center;
           gap: 8px;
@@ -170,7 +161,7 @@ export default function Layout() {
           width: 30px;
           height: 30px;
           border-radius: 50%;
-          background: rgba(59, 130, 246, 0.15);
+          background: var(--primary-color-soft);
           border: 1px solid rgba(59, 130, 246, 0.25);
           display: flex;
           align-items: center;
@@ -185,7 +176,7 @@ export default function Layout() {
         .sidebar-user-email {
           flex: 1;
           font-size: 12px;
-          color: #6b7280;
+          color: var(--text-muted);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -195,9 +186,9 @@ export default function Layout() {
           width: 28px;
           height: 28px;
           border-radius: 7px;
-          border: 1px solid rgba(148, 163, 184, 0.15);
+          border: 1px solid var(--border-subtle);
           background: transparent;
-          color: #6b7280;
+          color: var(--text-muted);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -228,8 +219,8 @@ export default function Layout() {
           align-items: center;
           justify-content: space-between;
           padding: 12px 16px;
-          background: rgba(2, 6, 23, 0.95);
-          border-bottom: 1px solid rgba(30, 58, 138, 0.25);
+          background: var(--surface);
+          border-bottom: 1px solid var(--border);
           backdrop-filter: blur(10px);
           flex-shrink: 0;
           z-index: 30;
@@ -239,7 +230,7 @@ export default function Layout() {
           display: flex;
           align-items: center;
           gap: 8px;
-          color: #e5e7eb;
+          color: var(--text-main);
           font-size: 14px;
           font-weight: 700;
         }
@@ -248,9 +239,9 @@ export default function Layout() {
           width: 34px;
           height: 34px;
           border-radius: 8px;
-          border: 1px solid rgba(148, 163, 184, 0.2);
+          border: 1px solid var(--border-subtle);
           background: transparent;
-          color: #9ca3af;
+          color: var(--text-muted);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -262,9 +253,10 @@ export default function Layout() {
           flex: 1;
           overflow-y: auto;
           overflow-x: hidden;
-          background: radial-gradient(ellipse at 20% 0%, rgba(37,99,235,0.12) 0%, transparent 50%),
-                      radial-gradient(ellipse at 80% 100%, rgba(14,116,144,0.1) 0%, transparent 50%),
-                      #020617;
+          background:
+            radial-gradient(ellipse at 20% 0%, rgba(37,99,235,0.12) 0%, transparent 50%),
+            radial-gradient(ellipse at 80% 100%, rgba(14,116,144,0.1) 0%, transparent 50%),
+            var(--bg-app);
           scrollbar-width: thin;
           scrollbar-color: rgba(59,130,246,0.2) transparent;
         }
@@ -282,10 +274,10 @@ export default function Layout() {
           margin: 0 auto;
           width: 100%;
           min-height: 100%;
-          color: #e5e7eb;
+          color: var(--text-main);
         }
 
-        /* ── Mobile drawer overlay ── */
+        /* ── Mobile drawer ── */
         .mobile-drawer-overlay {
           display: none;
           position: fixed;
@@ -297,13 +289,11 @@ export default function Layout() {
 
         .mobile-drawer {
           position: fixed;
-          top: 0;
-          left: 0;
-          bottom: 0;
+          top: 0; left: 0; bottom: 0;
           width: 240px;
           z-index: 50;
-          background: #020a1a;
-          border-right: 1px solid rgba(30, 58, 138, 0.3);
+          background: var(--bg-sidebar);
+          border-right: 1px solid var(--border);
           padding: 20px 12px;
           display: flex;
           flex-direction: column;
@@ -311,9 +301,7 @@ export default function Layout() {
           transition: transform 0.25s ease;
         }
 
-        .mobile-drawer.open {
-          transform: translateX(0);
-        }
+        .mobile-drawer.open { transform: translateX(0); }
 
         /* ── Responsive ── */
         @media (max-width: 768px) {
@@ -323,13 +311,13 @@ export default function Layout() {
           .page-inner { padding: 20px 16px 40px; }
         }
 
-        /* ── Pass-through card & existing classes ── */
+        /* ── Card overrides ── */
         .card {
-          background: rgba(15, 23, 42, 0.7);
+          background: var(--surface);
           border-radius: 14px;
-          border: 1px solid rgba(30, 64, 175, 0.2);
+          border: 1px solid var(--border);
           overflow: hidden;
-          color: #e5e7eb;
+          color: var(--text-main);
         }
         .card-body { padding: 16px 20px; }
       `}</style>
@@ -338,9 +326,7 @@ export default function Layout() {
         {/* Desktop sidebar */}
         <aside className="sidebar">
           <div className="sidebar-brand">
-            <div className="sidebar-brand-icon">
-              <Car size={16} />
-            </div>
+            <div className="sidebar-brand-icon"><Car size={16} /></div>
             US Accidents
           </div>
 
@@ -359,15 +345,16 @@ export default function Layout() {
           </ul>
 
           <div className="sidebar-footer">
-            <div className="sidebar-user-avatar">
-              {user?.email?.[0] ?? "U"}
-            </div>
+            <div className="sidebar-user-avatar">{user?.email?.[0] ?? "U"}</div>
             <div className="sidebar-user-email">{user?.email}</div>
             <button
               className="sidebar-logout"
-              onClick={handleLogout}
-              title="Logout"
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Light mode" : "Dark mode"}
             >
+              {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
+            <button className="sidebar-logout" onClick={handleLogout} title="Logout">
               <LogOut size={14} />
             </button>
           </div>
@@ -375,18 +362,13 @@ export default function Layout() {
 
         {/* Mobile drawer */}
         {mobileOpen && (
-          <div
-            className="mobile-drawer-overlay"
-            onClick={() => setMobileOpen(false)}
-          >
+          <div className="mobile-drawer-overlay" onClick={() => setMobileOpen(false)}>
             <div
               className={`mobile-drawer ${mobileOpen ? "open" : ""}`}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="sidebar-brand" style={{ marginBottom: 12 }}>
-                <div className="sidebar-brand-icon">
-                  <Car size={16} />
-                </div>
+                <div className="sidebar-brand-icon"><Car size={16} /></div>
                 US Accidents
               </div>
               <ul className="sidebar-nav">
@@ -404,15 +386,16 @@ export default function Layout() {
                 ))}
               </ul>
               <div className="sidebar-footer">
-                <div className="sidebar-user-avatar">
-                  {user?.email?.[0] ?? "U"}
-                </div>
+                <div className="sidebar-user-avatar">{user?.email?.[0] ?? "U"}</div>
                 <div className="sidebar-user-email">{user?.email}</div>
                 <button
                   className="sidebar-logout"
-                  onClick={handleLogout}
-                  title="Logout"
+                  onClick={toggleTheme}
+                  title={theme === "dark" ? "Light mode" : "Dark mode"}
                 >
+                  {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+                </button>
+                <button className="sidebar-logout" onClick={handleLogout} title="Logout">
                   <LogOut size={14} />
                 </button>
               </div>
@@ -422,21 +405,16 @@ export default function Layout() {
 
         {/* Main area */}
         <div className="main-area">
-          {/* Mobile top bar */}
           <header className="mobile-header">
             <div className="mobile-brand">
               <Car size={18} color="#60a5fa" />
               US Accidents
             </div>
-            <button
-              className="mobile-menu-btn"
-              onClick={() => setMobileOpen(true)}
-            >
+            <button className="mobile-menu-btn" onClick={() => setMobileOpen(true)}>
               <Menu size={18} />
             </button>
           </header>
 
-          {/* Scrollable page content */}
           <div className="page-scroll">
             <div className="page-inner">
               <Outlet />

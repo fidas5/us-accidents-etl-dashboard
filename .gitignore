@@ -4,3 +4,4 @@ __pycache__/
 node_modules/
 .env
 *.csv
+backend/app/ml/rf_model.pkl

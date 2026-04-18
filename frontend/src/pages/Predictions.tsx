@@ -25,10 +25,10 @@ const WEATHER_CONDITIONS = [
 ];
 
 const SEV_META: Record<number, { label: string; color: string; bg: string; desc: string }> = {
-  1: { label: "Low",      color: "#185fa5", bg: "rgba(59,130,246,0.12)",  desc: "Minor impact on traffic" },
-  2: { label: "Moderate", color: "#854f0b", bg: "rgba(249,115,22,0.12)",  desc: "Some traffic disruption expected" },
-  3: { label: "High",     color: "#993c1d", bg: "rgba(239,68,68,0.12)",   desc: "Significant traffic impact" },
-  4: { label: "Critical", color: "#a32d2d", bg: "rgba(220,38,38,0.15)",   desc: "Major road disruption — avoid area" },
+  1: { label: "Low",      color: "#60a5fa", bg: "rgba(59,130,246,0.12)",  desc: "Minor impact on traffic" },
+  2: { label: "Moderate", color: "#fbbf24", bg: "rgba(251,191,36,0.12)",  desc: "Some traffic disruption expected" },
+  3: { label: "High",     color: "#fb923c", bg: "rgba(251,146,60,0.12)",  desc: "Significant traffic impact" },
+  4: { label: "Critical", color: "#f87171", bg: "rgba(248,113,113,0.12)", desc: "Major road disruption — avoid area" },
 };
 
 const HOUR_PRESETS = [0, 3, 6, 7, 8, 9, 12, 15, 16, 17, 18, 21];
@@ -71,73 +71,138 @@ export default function PredictPage() {
   return (
     <>
       <style>{`
-        .pr-title { font-size:22px; font-weight:500; color:#e5e7eb; margin:0 0 4px; }
-        .pr-sub   { font-size:12px; color:#6b7280; font-family:ui-monospace,monospace; margin:0 0 28px; }
-        .pr-layout { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
+        .pr-title { font-size: 22px; font-weight: 500; color: var(--text-main); margin: 0 0 4px; }
+        .pr-sub   { font-size: 12px; color: var(--text-muted); font-family: var(--mono); margin: 0 0 28px; }
+
+        .pr-layout {
+          display: grid; grid-template-columns: 1fr 1fr;
+          gap: 16px; align-items: start;
+        }
+
         .pr-card {
-          background:rgba(15,23,42,0.7); border:1px solid rgba(30,58,138,0.25);
-          border-radius:12px; padding:22px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 12px; padding: 22px;
         }
-        .pr-card-title { font-size:13px; font-weight:500; color:#93c5fd; text-transform:uppercase; letter-spacing:0.06em; margin:0 0 16px; }
-        .pr-field { margin-bottom:14px; }
-        .pr-label { display:block; font-size:11px; color:#6b7280; font-family:ui-monospace,monospace; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+        .pr-card-title {
+          font-size: 13px; font-weight: 500; color: #93c5fd;
+          text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 16px;
+        }
+
+        .pr-field { margin-bottom: 14px; }
+        .pr-label {
+          display: block; font-size: 11px; color: var(--text-muted);
+          font-family: var(--mono); text-transform: uppercase;
+          letter-spacing: 0.06em; margin-bottom: 6px;
+        }
+
         .pr-input, .pr-select {
-          width:100%; height:36px; padding:0 12px; box-sizing:border-box;
-          background:rgba(7,14,31,0.6); border:1px solid rgba(30,58,138,0.3);
-          border-radius:8px; color:#e5e7eb; font-size:13px; transition:border-color 0.15s;
+          width: 100%; height: 36px; padding: 0 12px; box-sizing: border-box;
+          background: var(--surface2);
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          color: var(--text-main);
+          font-size: 13px; font-family: inherit;
+          transition: border-color 0.15s;
         }
-        .pr-input:focus, .pr-select:focus { outline:none; border-color:rgba(59,130,246,0.5); }
-        .pr-row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-        .pr-slider-wrap { display:flex; align-items:center; gap:10px; }
-        .pr-slider { flex:1; }
-        .pr-slider-val { font-size:13px; color:#93c5fd; font-family:ui-monospace,monospace; min-width:48px; text-align:right; }
-        .pr-hour-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; }
+        .pr-input:focus, .pr-select:focus {
+          outline: none; border-color: var(--primary-color);
+        }
+        .pr-select option {
+          background: var(--bg-surface-alt);
+          color: var(--text-main);
+        }
+
+        .pr-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+        .pr-slider-wrap { display: flex; align-items: center; gap: 10px; }
+        .pr-slider { flex: 1; accent-color: var(--primary-color); }
+        .pr-slider-val {
+          font-size: 13px; color: #93c5fd;
+          font-family: var(--mono); min-width: 48px; text-align: right;
+        }
+
+        .pr-hour-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
         .pr-hour-btn {
-          height:28px; border-radius:6px; border:1px solid rgba(30,58,138,0.25);
-          background:transparent; color:#6b7280; font-size:11px; cursor:pointer;
-          font-family:ui-monospace,monospace; transition:all 0.1s;
+          height: 28px; border-radius: 6px;
+          border: 1px solid var(--border);
+          background: transparent; color: var(--text-muted);
+          font-size: 11px; cursor: pointer;
+          font-family: var(--mono); transition: all 0.1s;
         }
-        .pr-hour-btn:hover  { background:rgba(59,130,246,0.1); color:#93c5fd; }
-        .pr-hour-btn.active { background:#3b82f6; color:white; border-color:#3b82f6; }
+        .pr-hour-btn:hover  { background: var(--primary-color-soft); color: #93c5fd; }
+        .pr-hour-btn.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+
         .pr-predict-btn {
-          width:100%; height:42px; border-radius:10px; border:none;
-          background:linear-gradient(135deg,#3b82f6,#6366f1); color:white;
-          font-size:14px; font-weight:500; cursor:pointer;
-          display:flex; align-items:center; justify-content:center; gap:8px;
-          transition:opacity 0.15s; margin-top:20px;
+          width: 100%; height: 42px; border-radius: 10px; border: none;
+          background: linear-gradient(135deg, #3b82f6, #6366f1);
+          color: white; font-size: 14px; font-weight: 500; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          transition: opacity 0.15s; margin-top: 20px;
         }
-        .pr-predict-btn:hover    { opacity:0.88; }
-        .pr-predict-btn:disabled { opacity:0.45; cursor:not-allowed; }
-        .pr-result-card { border-radius:12px; padding:24px; border:1px solid rgba(30,58,138,0.2); }
-        .pr-result-top  { text-align:center; margin-bottom:20px; }
-        .pr-result-label { font-size:11px; color:#6b7280; font-family:ui-monospace,monospace; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; }
-        .pr-result-num  { font-size:72px; font-weight:500; line-height:1; margin-bottom:8px; }
-        .pr-result-badge { display:inline-block; padding:4px 16px; border-radius:99px; font-size:13px; font-weight:500; margin-bottom:8px; }
-        .pr-result-desc { font-size:13px; color:#9ca3af; }
-        .pr-confidence  { font-size:13px; color:#6b7280; margin-top:6px; }
-        .pr-proba-grid  { display:flex; flex-direction:column; gap:8px; margin-top:20px; }
-        .pr-proba-row   { display:flex; align-items:center; gap:10px; }
-        .pr-proba-label { font-size:12px; font-family:ui-monospace,monospace; color:#6b7280; width:20px; flex-shrink:0; }
-        .pr-proba-track { flex:1; height:6px; background:rgba(30,58,138,0.2); border-radius:3px; overflow:hidden; }
-        .pr-proba-fill  { height:100%; border-radius:3px; transition:width 0.6s ease; }
-        .pr-proba-pct   { font-size:12px; font-family:ui-monospace,monospace; color:#9ca3af; width:38px; text-align:right; flex-shrink:0; }
-        .pr-summary     { display:flex; flex-direction:column; gap:0; margin-top:20px; border-top:1px solid rgba(30,58,138,0.15); padding-top:16px; }
-        .pr-summary-row { display:flex; justify-content:space-between; font-size:12px; padding:5px 0; border-bottom:1px solid rgba(30,58,138,0.1); }
-        .pr-summary-row:last-child { border-bottom:none; }
+        .pr-predict-btn:hover    { opacity: 0.88; }
+        .pr-predict-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .pr-result-card { border-radius: 12px; padding: 24px; border: 1px solid var(--border); }
+        .pr-result-top  { text-align: center; margin-bottom: 20px; }
+        .pr-result-label {
+          font-size: 11px; color: var(--text-muted);
+          font-family: var(--mono); text-transform: uppercase;
+          letter-spacing: 0.06em; margin-bottom: 10px;
+        }
+        .pr-result-num    { font-size: 72px; font-weight: 500; line-height: 1; margin-bottom: 8px; }
+        .pr-result-badge  { display: inline-block; padding: 4px 16px; border-radius: 99px; font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+        .pr-result-desc   { font-size: 13px; color: var(--text-muted); }
+        .pr-confidence    { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+
+        .pr-proba-section-label {
+          font-size: 11px; color: var(--text-muted); font-family: var(--mono);
+          text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
+        }
+        .pr-proba-grid  { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+        .pr-proba-row   { display: flex; align-items: center; gap: 10px; }
+        .pr-proba-label { font-size: 12px; font-family: var(--mono); color: var(--text-muted); width: 20px; flex-shrink: 0; }
+        .pr-proba-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+        .pr-proba-fill  { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+        .pr-proba-pct   { font-size: 12px; font-family: var(--mono); color: var(--text-muted); width: 38px; text-align: right; flex-shrink: 0; }
+
+        .pr-summary { display: flex; flex-direction: column; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px; }
+        .pr-summary-row {
+          display: flex; justify-content: space-between;
+          font-size: 12px; padding: 5px 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .pr-summary-row:last-child { border-bottom: none; }
+        .pr-summary-key { color: var(--text-muted); font-family: var(--mono); }
+        .pr-summary-val { color: var(--text-main); }
+
         .pr-idle {
-          display:flex; flex-direction:column; align-items:center;
-          justify-content:center; padding:56px 24px; text-align:center; gap:12px;
+          display: flex; flex-direction: column; align-items: center;
+          justify-content: center; padding: 56px 24px; text-align: center; gap: 12px;
         }
-        .pr-idle-text { font-size:13px; color:#4b5563; font-family:ui-monospace,monospace; }
+        .pr-idle-text { font-size: 13px; color: var(--text-muted); font-family: var(--mono); }
+
         .pr-error {
-          padding:14px; border-radius:10px; background:rgba(239,68,68,0.08);
-          border:1px solid rgba(239,68,68,0.2); color:#f87171;
-          font-size:13px; font-family:ui-monospace,monospace;
-          display:flex; gap:8px; align-items:flex-start;
+          padding: 14px; border-radius: 10px;
+          background: rgba(239,68,68,0.08);
+          border: 1px solid rgba(239,68,68,0.2);
+          color: #f87171; font-size: 13px; font-family: var(--mono);
+          display: flex; gap: 8px; align-items: flex-start;
         }
-        .pr-loading { display:flex; align-items:center; justify-content:center; padding:56px; color:#6b7280; font-size:13px; font-family:ui-monospace,monospace; gap:10px; }
-        @keyframes spin { to { transform:rotate(360deg); } }
-        .spin { animation:spin 1s linear infinite; display:inline-block; }
+
+        .pr-loading {
+          display: flex; align-items: center; justify-content: center;
+          padding: 56px; color: var(--text-muted);
+          font-size: 13px; font-family: var(--mono); gap: 10px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin { animation: spin 1s linear infinite; display: inline-block; }
+
+        @media (max-width: 768px) {
+          .pr-layout { grid-template-columns: 1fr; }
+          .pr-hour-grid { grid-template-columns: repeat(4, 1fr); }
+        }
       `}</style>
 
       <h1 className="pr-title">Severity Prediction</h1>
@@ -234,7 +299,7 @@ export default function PredictPage() {
 
           {!error && !loading && !result && (
             <div className="pr-idle">
-              <BrainCircuit size={52} color="#1e3a5f" />
+              <BrainCircuit size={52} color="var(--border2)" />
               <span className="pr-idle-text">Fill in the form and click predict</span>
             </div>
           )}
@@ -255,10 +320,7 @@ export default function PredictPage() {
                   </div>
                 </div>
 
-                {/* Probability bars */}
-                <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "ui-monospace,monospace", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-                  Class probabilities
-                </div>
+                <div className="pr-proba-section-label">Class probabilities</div>
                 <div className="pr-proba-grid">
                   {Object.entries(result.probabilities).map(([cls, pct]) => {
                     const m = SEV_META[Number(cls)];
@@ -267,7 +329,7 @@ export default function PredictPage() {
                         <span className="pr-proba-label" style={{ color: m?.color }}>S{cls}</span>
                         <div className="pr-proba-track">
                           <div className="pr-proba-fill"
-                            style={{ width: `${pct}%`, background: m?.color ?? "#6b7280" }} />
+                            style={{ width: `${pct}%`, background: m?.color ?? "var(--text-muted)" }} />
                         </div>
                         <span className="pr-proba-pct">{pct}%</span>
                       </div>
@@ -287,8 +349,8 @@ export default function PredictPage() {
                   ["Weather",     form.weather_condition],
                 ] as [string, any][]).map(([k, v]) => (
                   <div key={k} className="pr-summary-row">
-                    <span style={{ color: "#6b7280", fontFamily: "ui-monospace,monospace" }}>{k}</span>
-                    <span style={{ color: "#e5e7eb" }}>{v}</span>
+                    <span className="pr-summary-key">{k}</span>
+                    <span className="pr-summary-val">{v}</span>
                   </div>
                 ))}
               </div>

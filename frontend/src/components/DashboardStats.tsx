@@ -10,8 +10,6 @@ interface HourRow { hour: number; count: number; }
 interface StateRow { state: string; count: number; }
 interface DashboardStatsProps { token: string; }
 
-
-
 // ── Color palettes ─────────────────────────────────────────────────────────
 const SEV_COLORS   = ["#3b82f6", "#f97316", "#e84b3a", "#8b5cf6"];
 const STATE_COLORS = [
@@ -20,15 +18,26 @@ const STATE_COLORS = [
   "#f59e0b","#6366f1",
 ];
 
+const MONTHS = [
+  { value: 1,  label: "January" },
+  { value: 2,  label: "February" },
+  { value: 3,  label: "March" },
+  { value: 4,  label: "April" },
+  { value: 5,  label: "May" },
+  { value: 6,  label: "June" },
+  { value: 7,  label: "July" },
+  { value: 8,  label: "August" },
+  { value: 9,  label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmtK(n: number) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (n >= 1_000)     return (n / 1_000).toFixed(0) + "k";
   return String(n);
-}
-
-function initials(email?: string | null) {
-  return email ? email[0].toUpperCase() : "?";
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -41,18 +50,9 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
   const [error,       setError]       = useState<string | null>(null);
   const [showVars,    setShowVars]    = useState(false);
   const [minSeverity, setMinSeverity] = useState<number | null>(null);
+  const [month,       setMonth]       = useState<number | null>(null);
   const [stateAnim,   setStateAnim]   = useState(false);
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
-
-  // Inject CSS once
-  useEffect(() => {
-    if (!document.getElementById("ds-styles")) {
-      const s = document.createElement("style");
-      s.id = "ds-styles";
-      s.textContent = CSS;
-      document.head.appendChild(s);
-    }
-  }, []);
 
   // Fetch data
   useEffect(() => {
@@ -69,13 +69,17 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
         setStateAnim(false);
 
         const headers = { Authorization: `Bearer ${token}` };
-        const params  = minSeverity != null ? { min_severity: minSeverity } : undefined;
+
+        // Build shared filter params (month + severity)
+        const filterParams: Record<string, any> = {};
+        if (minSeverity != null) filterParams.min_severity = minSeverity;
+        if (month != null)       filterParams.month        = month;
 
         const [sumRes, sevRes, hourRes, stateRes] = await Promise.all([
           axios.get("http://127.0.0.1:5050/api/stats/summary",     { headers }),
-          axios.get("http://127.0.0.1:5050/api/stats/by-severity", { headers }),
-          axios.get("http://127.0.0.1:5050/api/stats/by-hour",     { headers, params }),
-          axios.get("http://127.0.0.1:5050/api/stats/by-state",    { headers, params })
+          axios.get("http://127.0.0.1:5050/api/stats/by-severity", { headers, params: filterParams }),
+          axios.get("http://127.0.0.1:5050/api/stats/by-hour",     { headers, params: filterParams }),
+          axios.get("http://127.0.0.1:5050/api/stats/by-state",    { headers, params: filterParams })
                .catch(() => ({ data: { data: [] } })),
         ]);
 
@@ -84,7 +88,6 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
         setByHour(hourRes.data.data ?? []);
         setByState(stateRes.data.data ?? []);
 
-        // trigger bar animation after paint
         requestAnimationFrame(() => setTimeout(() => setStateAnim(true), 80));
       } catch (err: any) {
         setError(
@@ -98,13 +101,20 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
     };
 
     fetchAll();
-  }, [token, minSeverity]);
+  }, [token, minSeverity, month]);
 
   const showTip = (e: React.MouseEvent, text: string) =>
     setTip({ x: e.clientX + 14, y: e.clientY - 36, text });
   const moveTip = (e: React.MouseEvent) =>
     setTip((t) => t ? { ...t, x: e.clientX + 14, y: e.clientY - 36 } : null);
   const hideTip = () => setTip(null);
+
+  const activeFilterCount = [minSeverity, month].filter(v => v != null).length;
+
+  const handleReset = () => {
+    setMinSeverity(null);
+    setMonth(null);
+  };
 
   // ── Loading state ──
   if (loading) {
@@ -120,20 +130,16 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
 
   // ── Error state ──
   if (error || !summary) {
-  return (
-    <div className="ds-root">
-      <div className="ds-loading ds-error">
-        {error === "Missing auth token" && (
-          <>You are not authenticated. Please log in again.</>
-        )}
-        {error && error !== "Missing auth token" && (
-          <>Backend error: {error}</>
-        )}
-        {!error && !summary && <>Error: No data returned from API.</>}
+    return (
+      <div className="ds-root">
+        <div className="ds-loading ds-error">
+          {error === "Missing auth token" && <>You are not authenticated. Please log in again.</>}
+          {error && error !== "Missing auth token" && <>Backend error: {error}</>}
+          {!error && !summary && <>Error: No data returned from API.</>}
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   const sevMax   = Math.max(...bySeverity.map((d) => d.count), 1);
   const hourMax  = Math.max(...byHour.map((d)     => d.count), 1);
@@ -149,6 +155,8 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
     return "rgba(59,130,246,0.28)";
   }
 
+  const selectedMonthLabel = MONTHS.find(m => m.value === month)?.label ?? null;
+
   return (
     <div className="ds-root">
       {/* Tooltip */}
@@ -161,23 +169,37 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
       {/* ── Header ── */}
       <div className="ds-header">
         <div>
-          <h1 className="ds-tile">
+          <h1 className="ds-title">
             <span className="ds-live-dot" />
             US Accidents Analytics
           </h1>
           <div className="ds-sub">
             {summary.time_range.min_date} → {summary.time_range.max_date}
             &nbsp;·&nbsp;{summary.total_accidents.toLocaleString()} records
+            {selectedMonthLabel && (
+              <>&nbsp;·&nbsp;<span style={{ color: "var(--accent3)" }}>{selectedMonthLabel}</span></>
+            )}
           </div>
         </div>
 
         <div className="ds-controls">
+          {/* Month filter */}
+          <select
+            className="ds-select"
+            value={month ?? ""}
+            onChange={(e) => setMonth(e.target.value === "" ? null : Number(e.target.value))}
+          >
+            <option value="">All months</option>
+            {MONTHS.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+
+          {/* Severity filter */}
           <select
             className="ds-select"
             value={minSeverity ?? ""}
-            onChange={(e) =>
-              setMinSeverity(e.target.value === "" ? null : Number(e.target.value))
-            }
+            onChange={(e) => setMinSeverity(e.target.value === "" ? null : Number(e.target.value))}
           >
             <option value="">All severities</option>
             <option value="1">Severity ≥ 1</option>
@@ -185,6 +207,13 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
             <option value="3">Severity ≥ 3</option>
             <option value="4">Severity ≥ 4</option>
           </select>
+
+          {/* Reset button — only shown when a filter is active */}
+          {activeFilterCount > 0 && (
+            <button className="ds-btn" onClick={handleReset} title="Clear all filters">
+              ✕ Reset
+            </button>
+          )}
 
           <button
             className={`ds-btn${showVars ? " active" : ""}`}
@@ -195,6 +224,24 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
         </div>
       </div>
 
+      {/* ── Active filter pills ── */}
+      {activeFilterCount > 0 && (
+        <div className="ds-filter-pills">
+          {month != null && (
+            <span className="ds-pill">
+              Month: {selectedMonthLabel}
+              <button className="ds-pill-x" onClick={() => setMonth(null)}>×</button>
+            </span>
+          )}
+          {minSeverity != null && (
+            <span className="ds-pill">
+              Severity ≥ {minSeverity}
+              <button className="ds-pill-x" onClick={() => setMinSeverity(null)}>×</button>
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── KPI strip ── */}
       <div className="ds-kpi-strip">
         <div className="ds-kpi k1">
@@ -202,12 +249,6 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
           <div className="ds-kpi-value">{summary.total_accidents.toLocaleString()}</div>
           <div className="ds-kpi-sub">Across all US states</div>
         </div>
-         {/* ── KPI strip ── 
-        <div className="ds-kpi k2">
-          <div className="ds-kpi-label">Cities covered</div>
-          <div className="ds-kpi-value">{summary.total_cities.toLocaleString()}</div>
-          <div className="ds-kpi-sub">Unique locations</div>
-        </div>*/}
         <div className="ds-kpi k3">
           <div className="ds-kpi-label">Data period</div>
           <div className="ds-kpi-value">
@@ -215,6 +256,18 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
           </div>
           <div className="ds-kpi-sub">
             {summary.time_range.min_date} → {summary.time_range.max_date}
+          </div>
+        </div>
+        <div className="ds-kpi k2">
+          <div className="ds-kpi-label">Active filters</div>
+          <div className="ds-kpi-value">{activeFilterCount}</div>
+          <div className="ds-kpi-sub">
+            {activeFilterCount === 0
+              ? "No filters applied"
+              : [
+                  month != null && selectedMonthLabel,
+                  minSeverity != null && `Sev ≥ ${minSeverity}`,
+                ].filter(Boolean).join(" · ")}
           </div>
         </div>
       </div>
@@ -310,38 +363,31 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
           </div>
         </div>
 
-        {/* Hourly distribution
-        <div className="ds-chart-card wide">
-          <div className="ds-chart-header">
-            <div className="ds-chart-title">Accidents by hour of day</div>
-            <div className="ds-chart-badge">24h · orange = rush AM · red = rush PM</div>
-          </div>
-          <div className="ds-hour-chart">
-            {byHour.map((d) => (
-              <div key={d.hour} className="ds-hour-wrap">
-                <div
-                  className="ds-hour-bar"
-                  style={{
-                    height: `${(d.count / hourMax) * 100}%`,
-                    background: hourColor(d),
-                  }}
-                  onMouseEnter={(e) =>
-                    showTip(e, `${String(d.hour).padStart(2, "0")}:00  —  ${d.count.toLocaleString()}`)
-                  }
-                  onMouseMove={moveTip}
-                  onMouseLeave={hideTip}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="ds-hour-axis">
-            {["00:00", "06:00", "12:00", "18:00", "23:00"].map((t) => (
-              <span key={t} className="ds-hour-tick">{t}</span>
-            ))}
-          </div>
-        </div> */}
-
       </div>
+
+      {/* ── Filter pills CSS (scoped inline) ── */}
+      <style>{`
+        .ds-root { width: 100%; }
+        .ds-filter-pills {
+          display: flex; flex-wrap: wrap; gap: 8px;
+          margin-bottom: 14px;
+        }
+        .ds-pill {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 4px 10px 4px 12px;
+          background: var(--primary-color-soft);
+          border: 1px solid rgba(59,130,246,0.35);
+          border-radius: 99px;
+          font-size: 12px; font-family: var(--mono);
+          color: #93c5fd;
+        }
+        .ds-pill-x {
+          background: none; border: none; cursor: pointer;
+          color: #93c5fd; font-size: 14px; line-height: 1;
+          padding: 0; opacity: 0.7; transition: opacity 0.15s;
+        }
+        .ds-pill-x:hover { opacity: 1; }
+      `}</style>
     </div>
   );
 };

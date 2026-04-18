@@ -24,28 +24,27 @@ interface PaginatedResponse {
 }
 
 const SEV_COLORS: Record<number, { bg: string; color: string }> = {
-  1: { bg: "#e6f1fb", color: "#185fa5" },
-  2: { bg: "#faeeda", color: "#854f0b" },
-  3: { bg: "#faece7", color: "#993c1d" },
-  4: { bg: "#fcebeb", color: "#a32d2d" },
+  1: { bg: "rgba(59,130,246,0.15)",  color: "#93c5fd" },
+  2: { bg: "rgba(234,179,8,0.15)",   color: "#fde047" },
+  3: { bg: "rgba(249,115,22,0.15)",  color: "#fdba74" },
+  4: { bg: "rgba(239,68,68,0.15)",   color: "#fca5a5" },
 };
 
 const PAGE_SIZE = 10;
 
 export default function DataExplorerPage() {
   const { token } = useAuth();
-  const [data, setData]               = useState<Accident[]>([]);
-  const [total, setTotal]             = useState(0);
-  const [totalPages, setTotalPages]   = useState(0);
-  const [page, setPage]               = useState(1);
-  const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState<string | null>(null);
+  const [data, setData]             = useState<Accident[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [page, setPage]             = useState(1);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState<string | null>(null);
 
-  // filters
-  const [search, setSearch]           = useState("");
-  const [severity, setSeverity]       = useState("");
-  const [state, setState]             = useState("");
-  const [year, setYear]               = useState("");
+  const [search, setSearch]     = useState("");
+  const [severity, setSeverity] = useState("");
+  const [state, setState]       = useState("");
+  const [year, setYear]         = useState("");
 
   const fetchData = useCallback(async (p: number) => {
     if (!token) return;
@@ -72,14 +71,8 @@ export default function DataExplorerPage() {
     }
   }, [token, search, severity, state, year]);
 
-  useEffect(() => {
-    setPage(1);
-    fetchData(1);
-  }, [search, severity, state, year]);
-
-  useEffect(() => {
-    fetchData(page);
-  }, [page]);
+  useEffect(() => { setPage(1); fetchData(1); }, [search, severity, state, year]);
+  useEffect(() => { fetchData(page); }, [page]);
 
   const handleExport = () => {
     if (!data.length) return;
@@ -113,62 +106,127 @@ export default function DataExplorerPage() {
   return (
     <>
       <style>{`
-        .de-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
-        .de-title  { font-size:22px; font-weight:500; color:#e5e7eb; margin:0 0 4px; }
-        .de-sub    { font-size:12px; color:#6b7280; font-family:ui-monospace,monospace; }
-        .de-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+        .de-header {
+          display: flex; align-items: flex-start; justify-content: space-between;
+          margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+        }
+        .de-title { font-size: 22px; font-weight: 500; color: var(--text-main); margin: 0 0 4px; }
+        .de-sub   { font-size: 12px; color: var(--text-muted); font-family: var(--mono); }
+
+        .de-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
         .de-input, .de-select {
-          height:32px; padding:0 10px;
-          border:1px solid rgba(30,58,138,0.3); border-radius:8px;
-          background:rgba(15,23,42,0.7); color:#e5e7eb; font-size:13px;
+          height: 32px; padding: 0 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: var(--surface2);
+          color: var(--text-main);
+          font-size: 13px;
+          font-family: inherit;
         }
-        .de-input { width:160px; }
-        .de-input::placeholder { color:#4b5563; }
-        .de-input:focus, .de-select:focus { outline:none; border-color:rgba(59,130,246,0.5); }
+        .de-input { width: 160px; }
+        .de-input::placeholder { color: var(--text-muted); }
+        .de-input:focus, .de-select:focus {
+          outline: none;
+          border-color: var(--primary-color);
+        }
+        .de-select option {
+          background: var(--bg-surface-alt);
+          color: var(--text-main);
+        }
+
         .de-btn {
-          height:32px; padding:0 14px;
-          border:1px solid rgba(30,58,138,0.3); border-radius:8px;
-          background:transparent; color:#9ca3af; font-size:13px; cursor:pointer;
-          transition:all 0.15s;
+          height: 32px; padding: 0 14px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text-muted);
+          font-size: 13px; cursor: pointer;
+          transition: all 0.15s;
         }
-        .de-btn:hover { background:rgba(255,255,255,0.05); color:#e5e7eb; }
-        .de-btn.primary { background:#3b82f6; color:white; border-color:#3b82f6; }
-        .de-btn.primary:hover { background:#2563eb; }
-        .de-kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px; }
-        .de-kpi { background:rgba(15,23,42,0.7); border:1px solid rgba(30,58,138,0.2); border-radius:10px; padding:12px 16px; }
-        .de-kpi-label { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; }
-        .de-kpi-value { font-size:20px; font-weight:500; color:#e5e7eb; }
-        .de-table-wrap { border:1px solid rgba(30,58,138,0.2); border-radius:12px; overflow:hidden; }
-        .de-table { width:100%; border-collapse:collapse; font-size:13px; }
+        .de-btn:hover { background: var(--surface2); color: var(--text-main); }
+        .de-btn.primary { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .de-btn.primary:hover { background: #1d4ed8; }
+        .de-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .de-kpis {
+          display: grid; grid-template-columns: repeat(3, 1fr);
+          gap: 10px; margin-bottom: 20px;
+        }
+        .de-kpi {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 10px; padding: 12px 16px;
+        }
+        .de-kpi-label {
+          font-size: 11px; color: var(--text-muted);
+          text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;
+        }
+        .de-kpi-value { font-size: 20px; font-weight: 500; color: var(--text-main); }
+
+        .de-table-wrap {
+          border: 1px solid var(--border);
+          border-radius: 12px; overflow: hidden;
+        }
+        .de-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
         .de-table thead th {
-          background:rgba(7,14,31,0.8); padding:10px 14px;
-          text-align:left; font-weight:500; color:#6b7280;
-          font-size:11px; text-transform:uppercase; letter-spacing:0.05em;
-          border-bottom:1px solid rgba(30,58,138,0.2); white-space:nowrap;
+          background: var(--surface2);
+          padding: 10px 14px; text-align: left;
+          font-weight: 500; color: var(--text-muted);
+          font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+          border-bottom: 1px solid var(--border); white-space: nowrap;
         }
-        .de-table tbody tr { border-bottom:1px solid rgba(30,58,138,0.12); transition:background 0.1s; }
-        .de-table tbody tr:last-child { border-bottom:none; }
-        .de-table tbody tr:hover { background:rgba(59,130,246,0.05); }
-        .de-table tbody td { padding:9px 14px; color:#d1d5db; }
-        .de-mono { font-family:ui-monospace,monospace; font-size:11px; color:#6b7280; }
-        .de-sev { display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:500; }
+        .de-table tbody tr {
+          border-bottom: 1px solid var(--border);
+          transition: background 0.1s;
+          background: var(--surface);
+        }
+        .de-table tbody tr:last-child { border-bottom: none; }
+        .de-table tbody tr:hover { background: var(--primary-color-soft); }
+        .de-table tbody td { padding: 9px 14px; color: var(--text-main); }
+
+        .de-mono { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+
+        .de-sev {
+          display: inline-block; padding: 2px 8px;
+          border-radius: 99px; font-size: 11px; font-weight: 500;
+        }
+
         .de-pagination {
-          display:flex; align-items:center; justify-content:space-between;
-          padding:12px 16px; background:rgba(7,14,31,0.6);
-          border-top:1px solid rgba(30,58,138,0.2); font-size:13px; color:#6b7280;
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 12px 16px;
+          background: var(--surface2);
+          border-top: 1px solid var(--border);
+          font-size: 13px; color: var(--text-muted);
         }
-        .de-page-btns { display:flex; gap:4px; }
+        .de-page-btns { display: flex; gap: 4px; }
         .de-page-btn {
-          height:28px; min-width:28px; padding:0 8px;
-          border:1px solid rgba(30,58,138,0.2); border-radius:6px;
-          background:transparent; color:#9ca3af; font-size:12px; cursor:pointer;
-          transition:all 0.1s;
+          height: 28px; min-width: 28px; padding: 0 8px;
+          border: 1px solid var(--border); border-radius: 6px;
+          background: transparent; color: var(--text-muted);
+          font-size: 12px; cursor: pointer; transition: all 0.1s;
         }
-        .de-page-btn:hover:not(:disabled) { background:rgba(59,130,246,0.1); color:#93c5fd; }
-        .de-page-btn.active { background:#3b82f6; color:white; border-color:#3b82f6; }
-        .de-page-btn:disabled { opacity:0.35; cursor:not-allowed; }
-        .de-loading { text-align:center; padding:48px; color:#6b7280; font-size:13px; font-family:ui-monospace,monospace; }
-        .de-error { text-align:center; padding:48px; color:#f87171; font-size:13px; }
+        .de-page-btn:hover:not(:disabled) { background: var(--primary-color-soft); color: #93c5fd; }
+        .de-page-btn.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .de-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+        .de-loading {
+          text-align: center; padding: 48px;
+          color: var(--text-muted); font-size: 13px; font-family: var(--mono);
+          background: var(--surface);
+        }
+        .de-error {
+          text-align: center; padding: 48px; color: #f87171; font-size: 13px;
+          background: var(--surface);
+        }
+
+        @media (max-width: 768px) {
+          .de-header   { flex-direction: column; }
+          .de-kpis     { grid-template-columns: 1fr 1fr; }
+          .de-controls { width: 100%; }
+          .de-input    { flex: 1; width: auto; }
+        }
       `}</style>
 
       <div className="de-header">
@@ -189,7 +247,9 @@ export default function DataExplorerPage() {
           </select>
           <select className="de-select" value={state} onChange={e => setState(e.target.value)}>
             <option value="">All states</option>
-            {["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"].map(s => <option key={s} value={s}>{s}</option>)}
+            {["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"].map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
           </select>
           <select className="de-select" value={year} onChange={e => setYear(e.target.value)}>
             <option value="">All years</option>
@@ -238,7 +298,7 @@ export default function DataExplorerPage() {
             </thead>
             <tbody>
               {data.map((row, i) => {
-                const sev = SEV_COLORS[row.severity] ?? { bg: "#374151", color: "#9ca3af" };
+                const sev = SEV_COLORS[row.severity] ?? { bg: "var(--surface2)", color: "var(--text-muted)" };
                 return (
                   <tr key={row.id}>
                     <td className="de-mono">{(page - 1) * PAGE_SIZE + i + 1}</td>
@@ -267,7 +327,7 @@ export default function DataExplorerPage() {
             <button className="de-page-btn" onClick={() => setPage(p => p-1)} disabled={page === 1}>←</button>
             {pageWindow().map((p, i) =>
               p === "..." ? (
-                <span key={`dots-${i}`} style={{ padding: "0 4px", color: "#6b7280", lineHeight: "28px" }}>…</span>
+                <span key={`dots-${i}`} style={{ padding: "0 4px", color: "var(--text-muted)", lineHeight: "28px" }}>…</span>
               ) : (
                 <button key={p} className={`de-page-btn ${page === p ? "active" : ""}`} onClick={() => setPage(p as number)}>{p}</button>
               )

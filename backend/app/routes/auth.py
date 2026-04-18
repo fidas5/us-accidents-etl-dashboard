@@ -51,7 +51,7 @@ def register():
         )
         mail.send(msg)
     except Exception as e:
-        print("MAIL ERROR:", repr(e))  # ← add this
+        print("MAIL ERROR:", repr(e))  
 
         return jsonify(
             {

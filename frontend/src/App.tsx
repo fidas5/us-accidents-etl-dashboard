@@ -16,6 +16,11 @@ import DataExplorerPage from "./pages/DataExplorer";
 import ETLPage from "./pages/ETLJobs";
 import PredictPage from "./pages/Predictions";
 
+
+
+import { ThemeProvider } from "./context/ThemeContext";
+
+
 function PrivateRoute({ children }: { children: JSX.Element }) {
   const { token } = useAuth();
   if (!token) {
@@ -81,10 +86,13 @@ function AppRoutes() {
 
 export default function App() {
   return (
+         <ThemeProvider>
+
     <AuthProvider>
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>
+    </ThemeProvider>
   );
 }

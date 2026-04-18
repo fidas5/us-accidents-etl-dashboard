@@ -8,15 +8,7 @@ export default function DashboardPage() {
 
   if (!token) {
     return (
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "40vh",
-        color: "#6b7280",
-        fontFamily: "ui-monospace, monospace",
-        fontSize: 13,
-      }}>
+      <div className="ds-loading">
         No authentication token found.
       </div>
     );
