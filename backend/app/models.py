@@ -14,6 +14,7 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     nom = db.Column(db.String(100), nullable=True)
     prenom = db.Column(db.String(100), nullable=True)
+
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
 
@@ -28,7 +29,7 @@ class ETLJob(db.Model):
     name = db.Column(db.String(255), nullable=False)
     job_type = db.Column(db.String(50), nullable=False)  # manuel / automatique
     status = db.Column(db.String(50), default="pending")
-    schedule = db.Column(db.String(255), nullable=True)  # cron, etc.
+    schedule = db.Column(db.String(255), nullable=True)
     last_run_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -49,9 +50,10 @@ class AccidentRaw(db.Model):
     latitude_raw = db.Column(db.Float)
     longitude_raw = db.Column(db.Float)
 
+
 class AccidentClean(db.Model):
     """
-    Table clean / DataMart : colonnes nettoyées et prêtes pour le dashboard.
+    Table clean / DataMart : colonnes nettoyées et normalisées (unités explicites).
     """
     __tablename__ = "accidents_clean"
 
@@ -62,8 +64,11 @@ class AccidentClean(db.Model):
     severity = db.Column(db.Integer, index=True)
     city = db.Column(db.String(100), index=True)
     state = db.Column(db.String(50), index=True)
-    temperature = db.Column(db.Float)
-    visibility = db.Column(db.Float)
+
+    # ✅ FIXED FIELDS (explicit units)
+    temperature_c = db.Column(db.Float)
+    visibility_km = db.Column(db.Float)
+
     weather_condition = db.Column(db.String(100))
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)

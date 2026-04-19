@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 import os
 import pandas as pd
 from datetime import datetime
@@ -10,20 +10,17 @@ etl_bp = Blueprint("etl", __name__, url_prefix="/etl")
 
 
 def _get_csv_path():
-    """
-    Retourne le chemin absolu vers le fichier CSV d'échantillon.
-    """
     base_dir = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
-    # nouveau nom de fichier
     return os.path.join(base_dir, "data", "us_accidents_sample.csv")
 
+
+# =========================
+# STEP 1: LOAD RAW
+# =========================
 @etl_bp.route("/load-raw", methods=["POST"])
 def load_raw():
-    """
-    Étape 1 : charge le CSV dans la table accidents_raw (staging) en chunks.
-    """
     csv_path = _get_csv_path()
 
     if not os.path.exists(csv_path):
@@ -65,18 +62,25 @@ def load_raw():
 
             chunk = chunk[list(cols_map.keys())].rename(columns=cols_map)
 
-            chunk["start_time_raw"] = pd.to_datetime(chunk["start_time_raw"], errors="coerce")
-            chunk = chunk[
-                (chunk["start_time_raw"].dt.year == 2022)
-            ]
-            chunk["start_time_raw"] = chunk["start_time_raw"].dt.strftime("%Y-%m-%d %H:%M:%S")
+            # Filter year 2022
+            chunk["start_time_raw"] = pd.to_datetime(
+                chunk["start_time_raw"], errors="coerce"
+            )
+            chunk = chunk[chunk["start_time_raw"].dt.year == 2022]
 
             if chunk.empty:
                 continue
 
-            # Apply same clean conversion to end_time_raw
-            chunk["end_time_raw"] = pd.to_datetime(chunk["end_time_raw"], errors="coerce")
-            chunk["end_time_raw"] = chunk["end_time_raw"].dt.strftime("%Y-%m-%d %H:%M:%S")
+            chunk["start_time_raw"] = chunk["start_time_raw"].dt.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            chunk["end_time_raw"] = pd.to_datetime(
+                chunk["end_time_raw"], errors="coerce"
+            )
+            chunk["end_time_raw"] = chunk["end_time_raw"].dt.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
 
             records = []
             for _, row in chunk.iterrows():
@@ -111,7 +115,7 @@ def load_raw():
                 db.session.bulk_save_objects(records)
                 db.session.commit()
                 total_inserted += len(records)
-                print(f"Inserted chunk with {len(records)} rows")
+                print(f"Inserted {len(records)} rows")
 
     except Exception as e:
         db.session.rollback()
@@ -124,42 +128,53 @@ def load_raw():
         {"message": "raw data loaded", "rows_inserted": total_inserted}
     ), 201
 
+
+# =========================
+# STEP 1.5: UPLOAD CSV
+# =========================
 @etl_bp.route("/upload-csv", methods=["POST"])
 @jwt_required()
 def upload_csv():
     if "file" not in request.files:
         return jsonify({"message": "No file provided"}), 400
+
     file = request.files["file"]
+
     if not file.filename.endswith(".csv"):
         return jsonify({"message": "Only .csv files accepted"}), 400
+
     save_path = _get_csv_path()
     file.save(save_path)
-    return jsonify({"message": f"File '{file.filename}' uploaded successfully"}), 200
 
+    return jsonify({"message": f"{file.filename} uploaded successfully"}), 200
+
+
+# =========================
+# STEP 2: BUILD CLEAN
+# =========================
 @etl_bp.route("/build-clean", methods=["POST"])
 def build_clean():
-    """
-    Étape 2 : transforme accidents_raw en accidents_clean (nettoyé).
-    """
-    # On vide la table clean avant de reconstruire
     db.session.query(AccidentClean).delete()
 
     raw_rows = AccidentRaw.query.all()
+
     if not raw_rows:
         return jsonify(
             {"message": "no raw data found, run /etl/load-raw first"}
         ), 400
 
     records = []
+
     for row in raw_rows:
-        # Parsing des dates (format ISO de Kaggle, ex: 2019-01-01 12:34:56)
+        # Parse start_time
         try:
             start_time = datetime.fromisoformat(
                 str(row.start_time_raw).replace("Z", "")
             )
         except Exception:
-            continue  # on ignore les lignes invalides
+            continue
 
+        # Parse end_time
         try:
             end_time = datetime.fromisoformat(
                 str(row.end_time_raw).replace("Z", "")
@@ -170,6 +185,22 @@ def build_clean():
         if row.severity_raw is None:
             continue
 
+        # =========================
+        # CONVERSIONS
+        # =========================
+
+        # Fahrenheit → Celsius
+        temperature_c = None
+        if row.temperature_raw is not None:
+            temperature_c = (row.temperature_raw - 32) * 5.0 / 9.0
+            temperature_c = round(temperature_c, 2)
+
+        # Miles → Kilometers
+        visibility_km = None
+        if row.visibility_raw is not None:
+            visibility_km = row.visibility_raw * 1.60934
+            visibility_km = round(visibility_km, 2)
+
         clean = AccidentClean(
             accident_id=row.accident_id,
             start_time=start_time,
@@ -177,12 +208,13 @@ def build_clean():
             severity=row.severity_raw,
             city=row.city_raw,
             state=row.state_raw,
-            temperature=row.temperature_raw,
-            visibility=row.visibility_raw,
+            temperature_c=temperature_c,
+            visibility_km=visibility_km,
             weather_condition=row.weather_condition_raw,
             latitude=row.latitude_raw,
             longitude=row.longitude_raw,
         )
+
         records.append(clean)
 
     if not records:
@@ -194,5 +226,5 @@ def build_clean():
     db.session.commit()
 
     return jsonify(
-        {"message": "clean data built from raw", "rows_inserted": len(records)}
+        {"message": "clean data built", "rows_inserted": len(records)}
     ), 201

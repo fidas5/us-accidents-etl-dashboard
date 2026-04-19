@@ -4,6 +4,7 @@ from sqlalchemy import func
 
 from .. import db
 from ..models import AccidentClean
+from sqlalchemy import extract
 
 stats_bp = Blueprint("stats", __name__, url_prefix="/api/stats")
 
@@ -22,104 +23,77 @@ def apply_filters(query):
     return query
 
 
+def get_filters(request):
+    filters = []
+    min_severity = request.args.get("min_severity", type=int)
+    month        = request.args.get("month", type=int)
+    if min_severity:
+        filters.append(AccidentClean.severity >= min_severity)
+    if month:
+        filters.append(extract("month", AccidentClean.start_time) == month)
+    return filters
+
+
 @stats_bp.route("/summary", methods=["GET"])
 @jwt_required()
-def stats_summary():
-    base = db.session.query(AccidentClean)
-    base = apply_filters(base)
-
-    total_accidents = base.with_entities(func.count(AccidentClean.id)).scalar()
-
-    total_cities = base.with_entities(
-        func.count(func.distinct(AccidentClean.city))
-    ).scalar()
-
-    min_date, max_date = base.with_entities(
+def summary():
+    filters = get_filters(request)
+    total     = AccidentClean.query.filter(*filters).count()
+    cities    = db.session.query(AccidentClean.city)\
+                  .filter(*filters).distinct().count()
+    time_range = db.session.query(
         func.min(AccidentClean.start_time),
-        func.max(AccidentClean.start_time),
-    ).one()
+        func.max(AccidentClean.start_time)
+    ).filter(*filters).one()
 
-    return jsonify({
-        "status": "ok",
-        "data": {
-            "total_accidents": int(total_accidents or 0),
-            "total_cities":    int(total_cities or 0),
-            "time_range": {
-                "min_date": min_date.isoformat() if min_date else None,
-                "max_date": max_date.isoformat() if max_date else None,
-            },
-        },
-    })
+    return jsonify({"data": {
+        "total_accidents": total,
+        "total_cities":    cities,
+        "time_range": {
+            "min_date": time_range[0].strftime("%Y-%m-%d") if time_range[0] else None,
+            "max_date": time_range[1].strftime("%Y-%m-%d") if time_range[1] else None,
+        }
+    }}), 200
 
 
 @stats_bp.route("/by-severity", methods=["GET"])
 @jwt_required()
-def stats_by_severity():
-    query = db.session.query(
+def by_severity():
+    filters = get_filters(request)
+    rows = db.session.query(
         AccidentClean.severity,
-        func.count(AccidentClean.id)
-    )
-    query = apply_filters(query)
-    rows  = (
-        query
-        .group_by(AccidentClean.severity)
-        .order_by(AccidentClean.severity)
-        .all()
-    )
+        func.count().label("count")
+    ).filter(*filters).group_by(AccidentClean.severity)\
+     .order_by(AccidentClean.severity).all()
 
-    return jsonify({
-        "status": "ok",
-        "data": [
-            {"severity": int(s) if s is not None else None, "count": int(c)}
-            for s, c in rows
-        ],
-    })
-
-
-@stats_bp.route("/by-state", methods=["GET"])
-@jwt_required()
-def stats_by_state():
-    query = db.session.query(
-        AccidentClean.state,
-        func.count(AccidentClean.id)
-    )
-    query = apply_filters(query)
-    rows  = (
-        query
-        .group_by(AccidentClean.state)
-        .order_by(func.count(AccidentClean.id).desc())
-        .limit(10)
-        .all()
-    )
-
-    return jsonify({
-        "status": "ok",
-        "data": [
-            {"state": s, "count": int(c)}
-            for s, c in rows if s is not None
-        ],
-    })
+    return jsonify({"data": [{"severity": r.severity, "count": r.count} for r in rows]}), 200
 
 
 @stats_bp.route("/by-hour", methods=["GET"])
 @jwt_required()
-def stats_by_hour():
-    query = db.session.query(
-        func.extract("hour", AccidentClean.start_time).label("hour"),
-        func.count(AccidentClean.id)
-    )
-    query = apply_filters(query)
-    rows  = (
-        query
-        .group_by("hour")
-        .order_by("hour")
-        .all()
-    )
+def by_hour():
+    filters = get_filters(request)
+    rows = db.session.query(
+        extract("hour", AccidentClean.start_time).label("hour"),
+        func.count().label("count")
+    ).filter(*filters).group_by("hour").order_by("hour").all()
 
-    return jsonify({
-        "status": "ok",
-        "data": [
-            {"hour": int(h), "count": int(c)}
-            for h, c in rows if h is not None
-        ],
-    })
+    return jsonify({"data": [{"hour": int(r.hour), "count": r.count} for r in rows]}), 200
+
+
+@stats_bp.route("/by-state", methods=["GET"])
+@jwt_required()
+def by_state():
+    filters = get_filters(request)
+    min_sev = request.args.get("min_severity", type=int)
+    rows = db.session.query(
+        AccidentClean.state,
+        func.count().label("count")
+    ).filter(*filters).group_by(AccidentClean.state)\
+     .order_by(func.count().desc()).limit(10).all()
+
+    return jsonify({"data": [{"state": r.state, "count": r.count} for r in rows]}), 200
+
+
+    # backend/app/routes/accidents.py  — add this new route
+

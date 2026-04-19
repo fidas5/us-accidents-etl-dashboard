@@ -1,153 +1,206 @@
 // src/components/DashboardStats.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
 
-// ── Types ──────────────────────────────────────────────────────────────────
 interface TimeRange { min_date: string | null; max_date: string | null; }
 interface Summary { total_accidents: number; total_cities: number; time_range: TimeRange; }
 interface SeverityRow { severity: number; count: number; }
 interface HourRow { hour: number; count: number; }
 interface StateRow { state: string; count: number; }
+interface CityMarker { city: string; state: string; latitude: number; longitude: number; count: number; avg_severity: number; }
 interface DashboardStatsProps { token: string; }
 
-// ── Color palettes ─────────────────────────────────────────────────────────
-const SEV_COLORS   = ["#3b82f6", "#f97316", "#e84b3a", "#8b5cf6"];
-const STATE_COLORS = [
-  "#ef4444","#f97316","#eab308","#22c55e",
-  "#3b82f6","#8b5cf6","#ec4899","#14b8a6",
-  "#f59e0b","#6366f1",
-];
+const SEV_COLORS = ["#3b82f6", "#f97316", "#e84b3a", "#8b5cf6"];
 
 const MONTHS = [
-  { value: 1,  label: "January" },
-  { value: 2,  label: "February" },
-  { value: 3,  label: "March" },
-  { value: 4,  label: "April" },
-  { value: 5,  label: "May" },
-  { value: 6,  label: "June" },
-  { value: 7,  label: "July" },
-  { value: 8,  label: "August" },
-  { value: 9,  label: "September" },
-  { value: 10, label: "October" },
-  { value: 11, label: "November" },
-  { value: 12, label: "December" },
+  { value: 1,  label: "January" },   { value: 2,  label: "February" },
+  { value: 3,  label: "March" },     { value: 4,  label: "April" },
+  { value: 5,  label: "May" },       { value: 6,  label: "June" },
+  { value: 7,  label: "July" },      { value: 8,  label: "August" },
+  { value: 9,  label: "September" }, { value: 10, label: "October" },
+  { value: 11, label: "November" },  { value: 12, label: "December" },
 ];
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 function fmtK(n: number) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (n >= 1_000)     return (n / 1_000).toFixed(0) + "k";
   return String(n);
 }
 
-// ── Component ──────────────────────────────────────────────────────────────
-const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
-  const [summary,     setSummary]     = useState<Summary | null>(null);
-  const [bySeverity,  setBySeverity]  = useState<SeverityRow[]>([]);
-  const [byHour,      setByHour]      = useState<HourRow[]>([]);
-  const [byState,     setByState]     = useState<StateRow[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState<string | null>(null);
-  const [showVars,    setShowVars]    = useState(false);
-  const [minSeverity, setMinSeverity] = useState<number | null>(null);
-  const [month,       setMonth]       = useState<number | null>(null);
-  const [stateAnim,   setStateAnim]   = useState(false);
-  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
+function sevColor(avg: number) {
+  if (avg >= 3.5) return "#ef4444";
+  if (avg >= 2.5) return "#f97316";
+  if (avg >= 1.5) return "#eab308";
+  return "#3b82f6";
+}
 
-  // Fetch data
+function markerRadius(count: number, max: number) {
+  return 5 + (count / max) * 18;
+}
+
+const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
+  const [summary,       setSummary]       = useState<Summary | null>(null);
+  const [bySeverity,    setBySeverity]    = useState<SeverityRow[]>([]);
+  const [byHour,        setByHour]        = useState<HourRow[]>([]);
+  const [byState,       setByState]       = useState<StateRow[]>([]);
+  const [cities,        setCities]        = useState<CityMarker[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState<string | null>(null);
+  const [showVars,      setShowVars]      = useState(false);
+  const [minSeverity,   setMinSeverity]   = useState<number | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const [refetching,    setRefetching]    = useState(false);
+  const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const mapRef   = useRef<any>(null);
+  const leafRef  = useRef<any>(null);
+
+  // ── Fetch stats ──
   useEffect(() => {
-    if (!token) {
-      setError("Missing auth token");
-      setLoading(false);
-      return;
-    }
+    if (!token) { setError("Missing auth token"); setLoading(false); return; }
 
     const fetchAll = async () => {
+      if (!summary) setLoading(true); else setRefetching(true);
+      setError(null);
+
+      const headers = { Authorization: `Bearer ${token}` };
+      const filterParams: Record<string, any> = {};
+      if (minSeverity   != null) filterParams.min_severity = minSeverity;
+      if (selectedMonth != null) filterParams.month        = selectedMonth;
+
       try {
-        setLoading(true);
-        setError(null);
-        setStateAnim(false);
-
-        const headers = { Authorization: `Bearer ${token}` };
-
-        // Build shared filter params (month + severity)
-        const filterParams: Record<string, any> = {};
-        if (minSeverity != null) filterParams.min_severity = minSeverity;
-        if (month != null)       filterParams.month        = month;
-
-        const [sumRes, sevRes, hourRes, stateRes] = await Promise.all([
-          axios.get("http://127.0.0.1:5050/api/stats/summary",     { headers }),
+        const [sumRes, sevRes, hourRes, stateRes, cityRes] = await Promise.all([
+          axios.get("http://127.0.0.1:5050/api/stats/summary",     { headers, params: filterParams }),
           axios.get("http://127.0.0.1:5050/api/stats/by-severity", { headers, params: filterParams }),
           axios.get("http://127.0.0.1:5050/api/stats/by-hour",     { headers, params: filterParams }),
-          axios.get("http://127.0.0.1:5050/api/stats/by-state",    { headers, params: filterParams })
-               .catch(() => ({ data: { data: [] } })),
+          axios.get("http://127.0.0.1:5050/api/stats/by-state",    { headers, params: filterParams }).catch(() => ({ data: { data: [] } })),
+          axios.get("http://127.0.0.1:5050/api/accidents/cities",  { headers, params: filterParams }).catch(() => ({ data: { data: [] } })),
         ]);
-
         setSummary(sumRes.data.data);
         setBySeverity(sevRes.data.data ?? []);
         setByHour(hourRes.data.data ?? []);
         setByState(stateRes.data.data ?? []);
-
-        requestAnimationFrame(() => setTimeout(() => setStateAnim(true), 80));
+        setCities(cityRes.data.data ?? []);
       } catch (err: any) {
-        setError(
-          err.response?.data?.message ??
-          err.response?.data?.error ??
-          "Failed to load statistics"
-        );
+        setError(err.response?.data?.message ?? "Failed to load statistics");
       } finally {
         setLoading(false);
+        setRefetching(false);
       }
     };
 
     fetchAll();
-  }, [token, minSeverity, month]);
+  }, [token, minSeverity, selectedMonth]);
+
+  // ── Draw Leaflet map ──
+  useEffect(() => {
+    if (!cities.length) return;
+
+    const init = async () => {
+      // Dynamically load Leaflet CSS + JS
+      if (!document.getElementById("leaflet-css")) {
+        const link = document.createElement("link");
+        link.id = "leaflet-css";
+        link.rel = "stylesheet";
+        link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+        document.head.appendChild(link);
+      }
+
+      if (!(window as any).L) {
+        await new Promise<void>(resolve => {
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+          s.onload = () => resolve();
+          document.head.appendChild(s);
+        });
+      }
+
+      const L = (window as any).L;
+      const container = document.getElementById("accident-map");
+      if (!container) return;
+
+      // Destroy old map instance if re-rendering
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+
+      const map = L.map(container, { zoomControl: true, scrollWheelZoom: true })
+        .setView([37.8, -96], 4);
+      mapRef.current = map;
+
+      // Dark tile layer
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: "© OpenStreetMap © CARTO",
+        maxZoom: 19,
+      }).addTo(map);
+
+      const maxCount = Math.max(...cities.map(c => c.count), 1);
+
+      cities.forEach(city => {
+        const r     = markerRadius(city.count, maxCount);
+        const color = sevColor(city.avg_severity);
+
+        const circle = L.circleMarker([city.latitude, city.longitude], {
+          radius:      r,
+          fillColor:   color,
+          color:       "#fff",
+          weight:      0.8,
+          opacity:     0.9,
+          fillOpacity: 0.75,
+        });
+
+        const popupHtml = `
+          <div style="font-family:ui-monospace,monospace;min-width:160px">
+            <div style="font-size:13px;font-weight:600;color:#f1f5f9;margin-bottom:6px">
+              ${city.city}, ${city.state}
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px">
+              <span>Accidents</span>
+              <span style="color:#f1f5f9;font-weight:500">${city.count.toLocaleString()}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px">
+              <span>Avg severity</span>
+              <span style="color:${color};font-weight:500">${city.avg_severity.toFixed(2)}</span>
+            </div>
+            <div style="margin-top:8px;height:4px;border-radius:2px;background:#1e293b">
+              <div style="height:4px;border-radius:2px;background:${color};width:${Math.round((city.count / maxCount) * 100)}%"></div>
+            </div>
+            <div style="font-size:10px;color:#475569;margin-top:3px">${Math.round((city.count / maxCount) * 100)}% of top city</div>
+          </div>
+        `;
+
+        circle.bindPopup(popupHtml, {
+          className:   "accident-popup",
+          closeButton: false,
+          offset:      [0, -4],
+        });
+
+        circle.on("mouseover", function(this: any) { this.openPopup(); });
+        circle.on("mouseout",  function(this: any) { this.closePopup(); });
+        circle.addTo(map);
+      });
+    };
+
+    init();
+
+    return () => {
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+    };
+  }, [cities]);
 
   const showTip = (e: React.MouseEvent, text: string) =>
     setTip({ x: e.clientX + 14, y: e.clientY - 36, text });
   const moveTip = (e: React.MouseEvent) =>
-    setTip((t) => t ? { ...t, x: e.clientX + 14, y: e.clientY - 36 } : null);
+    setTip(t => t ? { ...t, x: e.clientX + 14, y: e.clientY - 36 } : null);
   const hideTip = () => setTip(null);
 
-  const activeFilterCount = [minSeverity, month].filter(v => v != null).length;
-
-  const handleReset = () => {
-    setMinSeverity(null);
-    setMonth(null);
-  };
-
-  // ── Loading state ──
-  if (loading) {
-    return (
-      <div className="ds-root">
-        <div className="ds-loading">
-          <div className="ds-loading-spinner" />
-          Loading dashboard…
-        </div>
-      </div>
-    );
-  }
-
-  // ── Error state ──
-  if (error || !summary) {
-    return (
-      <div className="ds-root">
-        <div className="ds-loading ds-error">
-          {error === "Missing auth token" && <>You are not authenticated. Please log in again.</>}
-          {error && error !== "Missing auth token" && <>Backend error: {error}</>}
-          {!error && !summary && <>Error: No data returned from API.</>}
-        </div>
-      </div>
-    );
-  }
-
-  const sevMax   = Math.max(...bySeverity.map((d) => d.count), 1);
-  const hourMax  = Math.max(...byHour.map((d)     => d.count), 1);
-  const stateMax = byState.length > 0 ? byState[0].count : 1;
-
-  const RUSH_AM = new Set([6, 7, 8, 9]);
-  const RUSH_PM = new Set([15, 16, 17, 18, 19]);
-
+  const activeFilterCount  = [minSeverity, selectedMonth].filter(v => v != null).length;
+  const selectedMonthLabel = MONTHS.find(m => m.value === selectedMonth)?.label ?? null;
+  const handleReset        = () => { setMinSeverity(null); setSelectedMonth(null); };
+  const sevMax             = Math.max(...bySeverity.map(d => d.count), 1);
+  const hourMax            = Math.max(...byHour.map(d => d.count), 1);
+  const RUSH_AM            = new Set([6, 7, 8, 9]);
+  const RUSH_PM            = new Set([15, 16, 17, 18, 19]);
   function hourColor(d: HourRow) {
     if (RUSH_AM.has(d.hour)) return "#f97316";
     if (RUSH_PM.has(d.hour)) return "#ef4444";
@@ -155,16 +208,25 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
     return "rgba(59,130,246,0.28)";
   }
 
-  const selectedMonthLabel = MONTHS.find(m => m.value === month)?.label ?? null;
+  if (loading) return (
+    <div className="ds-root">
+      <div className="ds-loading"><div className="ds-loading-spinner" />Loading dashboard…</div>
+    </div>
+  );
+
+  if (error || !summary) return (
+    <div className="ds-root">
+      <div className="ds-loading ds-error">
+        {error === "Missing auth token" && <>You are not authenticated. Please log in again.</>}
+        {error && error !== "Missing auth token" && <>Backend error: {error}</>}
+        {!error && !summary && <>No data returned from API.</>}
+      </div>
+    </div>
+  );
 
   return (
     <div className="ds-root">
-      {/* Tooltip */}
-      {tip && (
-        <div className="ds-tooltip" style={{ left: tip.x, top: tip.y }}>
-          {tip.text}
-        </div>
-      )}
+      {tip && <div className="ds-tooltip" style={{ left: tip.x, top: tip.y }}>{tip.text}</div>}
 
       {/* ── Header ── */}
       <div className="ds-header">
@@ -172,73 +234,64 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
           <h1 className="ds-title">
             <span className="ds-live-dot" />
             US Accidents Analytics
+            {refetching && (
+              <span style={{ marginLeft: 10, fontSize: 11, color: "#64748b", fontFamily: "ui-monospace,monospace", fontWeight: 400, animation: "ds-fade 0.6s ease-in-out infinite alternate" }}>
+                updating…
+              </span>
+            )}
           </h1>
           <div className="ds-sub">
             {summary.time_range.min_date} → {summary.time_range.max_date}
             &nbsp;·&nbsp;{summary.total_accidents.toLocaleString()} records
-            {selectedMonthLabel && (
-              <>&nbsp;·&nbsp;<span style={{ color: "var(--accent3)" }}>{selectedMonthLabel}</span></>
-            )}
+            {selectedMonthLabel && <>&nbsp;·&nbsp;<span style={{ color: "var(--accent3)" }}>{selectedMonthLabel}</span></>}
           </div>
         </div>
 
         <div className="ds-controls">
-          {/* Month filter */}
-          <select
-            className="ds-select"
-            value={month ?? ""}
-            onChange={(e) => setMonth(e.target.value === "" ? null : Number(e.target.value))}
-          >
-            <option value="">All months</option>
-            {MONTHS.map(m => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-
-          {/* Severity filter */}
-          <select
-            className="ds-select"
-            value={minSeverity ?? ""}
-            onChange={(e) => setMinSeverity(e.target.value === "" ? null : Number(e.target.value))}
-          >
-            <option value="">All severities</option>
-            <option value="1">Severity ≥ 1</option>
-            <option value="2">Severity ≥ 2</option>
-            <option value="3">Severity ≥ 3</option>
-            <option value="4">Severity ≥ 4</option>
-          </select>
-
-          {/* Reset button — only shown when a filter is active */}
-          {activeFilterCount > 0 && (
-            <button className="ds-btn" onClick={handleReset} title="Clear all filters">
-              ✕ Reset
-            </button>
-          )}
-
-          <button
-            className={`ds-btn${showVars ? " active" : ""}`}
-            onClick={() => setShowVars((v) => !v)}
-          >
-            {showVars ? "Hide vars" : "Variables"}
+          <div className="ds-filter-group">
+            <span className="ds-filter-label">month</span>
+            <div className="ds-filter-divider" />
+            <select className="ds-filter-select" value={selectedMonth ?? ""}
+              onChange={e => setSelectedMonth(e.target.value === "" ? null : Number(e.target.value))}>
+              <option value="">All</option>
+              {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+          <div className="ds-filter-group">
+            <span className="ds-filter-label">severity</span>
+            <div className="ds-filter-divider" />
+            <select className="ds-filter-select" value={minSeverity ?? ""}
+              onChange={e => setMinSeverity(e.target.value === "" ? null : Number(e.target.value))}>
+              <option value="">All</option>
+              <option value="1">≥ 1</option>
+              <option value="2">≥ 2</option>
+              <option value="3">≥ 3</option>
+              <option value="4">≥ 4</option>
+            </select>
+          </div>
+          <button className={`ds-btn${showVars ? " active" : ""}`} onClick={() => setShowVars(v => !v)}>
+            Variables
           </button>
         </div>
       </div>
 
       {/* ── Active filter pills ── */}
       {activeFilterCount > 0 && (
-        <div className="ds-filter-pills">
-          {month != null && (
-            <span className="ds-pill">
-              Month: {selectedMonthLabel}
-              <button className="ds-pill-x" onClick={() => setMonth(null)}>×</button>
+        <div className="ds-pills-row">
+          <span className="ds-pills-label">active :</span>
+          {selectedMonth != null && (
+            <span className="ds-pill ds-pill-blue">
+              {selectedMonthLabel}
+              <button className="ds-pill-x" onClick={() => setSelectedMonth(null)}>×</button>
             </span>
           )}
           {minSeverity != null && (
-            <span className="ds-pill">
-              Severity ≥ {minSeverity}
+            <span className="ds-pill ds-pill-amber">
+              sev ≥ {minSeverity}
               <button className="ds-pill-x" onClick={() => setMinSeverity(null)}>×</button>
             </span>
           )}
+          <span className="ds-reset-link" onClick={handleReset}>clear all</span>
         </div>
       )}
 
@@ -251,23 +304,15 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
         </div>
         <div className="ds-kpi k3">
           <div className="ds-kpi-label">Data period</div>
-          <div className="ds-kpi-value">
-            {summary.time_range.min_date?.slice(0, 4)}
-          </div>
-          <div className="ds-kpi-sub">
-            {summary.time_range.min_date} → {summary.time_range.max_date}
-          </div>
+          <div className="ds-kpi-value">{summary.time_range.min_date?.slice(0, 4)}</div>
+          <div className="ds-kpi-sub">{summary.time_range.min_date} → {summary.time_range.max_date}</div>
         </div>
         <div className="ds-kpi k2">
           <div className="ds-kpi-label">Active filters</div>
           <div className="ds-kpi-value">{activeFilterCount}</div>
           <div className="ds-kpi-sub">
-            {activeFilterCount === 0
-              ? "No filters applied"
-              : [
-                  month != null && selectedMonthLabel,
-                  minSeverity != null && `Sev ≥ ${minSeverity}`,
-                ].filter(Boolean).join(" · ")}
+            {activeFilterCount === 0 ? "No filters applied"
+              : [selectedMonth != null && selectedMonthLabel, minSeverity != null && `Sev ≥ ${minSeverity}`].filter(Boolean).join(" · ")}
           </div>
         </div>
       </div>
@@ -278,17 +323,13 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
           <div className="ds-vars-col">
             <div className="ds-vars-title">Quantitative (5)</div>
             <ul className="ds-vars-list">
-              {["severity", "temperature", "visibility", "latitude", "longitude"].map((v) => (
-                <li key={v}>{v}</li>
-              ))}
+              {["severity","temperature","visibility","latitude","longitude"].map(v => <li key={v}>{v}</li>)}
             </ul>
           </div>
           <div className="ds-vars-col">
             <div className="ds-vars-title">Qualitative (4)</div>
             <ul className="ds-vars-list qual">
-              {["city", "state", "weather_condition", "accident_id"].map((v) => (
-                <li key={v}>{v}</li>
-              ))}
+              {["city","state","weather_condition","accident_id"].map(v => <li key={v}>{v}</li>)}
             </ul>
           </div>
         </div>
@@ -296,8 +337,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
 
       {/* ── Charts grid ── */}
       <div className="ds-charts">
-
-        {/* Severity */}
+        {/* Severity bars */}
         <div className="ds-chart-card">
           <div className="ds-chart-header">
             <div className="ds-chart-title">Accidents by severity</div>
@@ -309,11 +349,8 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
                 <div className="ds-sev-val">{fmtK(d.count)}</div>
                 <div
                   className="ds-sev-bar"
-                  style={{
-                    height: `${(d.count / sevMax) * 100}%`,
-                    background: SEV_COLORS[i] ?? SEV_COLORS[0],
-                  }}
-                  onMouseEnter={(e) => showTip(e, `Severity ${d.severity}: ${d.count.toLocaleString()}`)}
+                  style={{ height: `${(d.count / sevMax) * 100}%`, background: SEV_COLORS[i] ?? SEV_COLORS[0] }}
+                  onMouseEnter={e => showTip(e, `Severity ${d.severity}: ${d.count.toLocaleString()}`)}
                   onMouseMove={moveTip}
                   onMouseLeave={hideTip}
                 />
@@ -322,71 +359,96 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ token }) => {
           </div>
           <div className="ds-sev-labels">
             {bySeverity.map((d, i) => (
-              <div
-                key={d.severity}
-                className="ds-sev-lbl"
-                style={{ color: SEV_COLORS[i] ?? SEV_COLORS[0] }}
-              >
+              <div key={d.severity} className="ds-sev-lbl" style={{ color: SEV_COLORS[i] ?? SEV_COLORS[0] }}>
                 S{d.severity}
               </div>
             ))}
           </div>
         </div>
 
-        {/* Top states */}
+        {/* Top states bar */}
         <div className="ds-chart-card">
           <div className="ds-chart-header">
             <div className="ds-chart-title">Top 10 states</div>
             <div className="ds-chart-badge">by count</div>
           </div>
           <div className="ds-state-chart">
-            {byState.slice(0, 10).map((d, i) => (
-              <div key={d.state} className="ds-state-row">
-                <div className="ds-state-name">{d.state}</div>
-                <div
-                  className="ds-state-track"
-                  onMouseEnter={(e) => showTip(e, `${d.state}: ${d.count.toLocaleString()}`)}
-                  onMouseMove={moveTip}
-                  onMouseLeave={hideTip}
-                >
-                  <div
-                    className="ds-state-fill"
-                    style={{
-                      width: stateAnim ? `${(d.count / stateMax) * 100}%` : "0%",
-                      background: STATE_COLORS[i % STATE_COLORS.length],
-                    }}
-                  />
+            {byState.slice(0, 10).map((d, i) => {
+              const stateMax = byState[0]?.count ?? 1;
+              const STATE_COLORS = ["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#6366f1"];
+              return (
+                <div key={d.state} className="ds-state-row">
+                  <div className="ds-state-name">{d.state}</div>
+                  <div className="ds-state-track"
+                    onMouseEnter={e => showTip(e, `${d.state}: ${d.count.toLocaleString()}`)}
+                    onMouseMove={moveTip}
+                    onMouseLeave={hideTip}>
+                    <div className="ds-state-fill" style={{ width: `${(d.count / stateMax) * 100}%`, background: STATE_COLORS[i % STATE_COLORS.length] }} />
+                  </div>
+                  <div className="ds-state-count">{fmtK(d.count)}</div>
                 </div>
-                <div className="ds-state-count">{fmtK(d.count)}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
-
       </div>
 
-      {/* ── Filter pills CSS (scoped inline) ── */}
+      {/* ── Full-width accident map ── */}
+      <div className="ds-chart-card" style={{ marginTop: 16 }}>
+        <div className="ds-chart-header">
+          <div className="ds-chart-title">Accident hotspots</div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {cities.length} locations · hover for details
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              {[
+                { label: "Low sev", color: "#3b82f6" },
+                { label: "Med",     color: "#eab308" },
+                { label: "High",    color: "#f97316" },
+                { label: "Critical",color: "#ef4444" },
+              ].map(l => (
+                <span key={l.label} style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 3, color: "var(--text-muted)" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, display: "inline-block" }} />
+                  {l.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div
+          id="accident-map"
+          style={{ width: "100%", height: 420, borderRadius: 8, overflow: "hidden", background: "#0f172a" }}
+        />
+      </div>
+
       <style>{`
-        .ds-root { width: 100%; }
-        .ds-filter-pills {
-          display: flex; flex-wrap: wrap; gap: 8px;
-          margin-bottom: 14px;
+        @keyframes ds-fade { from { opacity:0.4; } to { opacity:1; } }
+        .ds-filter-group {
+          display:flex; align-items:center; gap:4px;
+          background:rgba(15,23,42,0.5);
+          border:1px solid rgba(30,58,138,0.25); border-radius:8px;
+          padding:3px 3px 3px 10px;
         }
-        .ds-pill {
-          display: inline-flex; align-items: center; gap: 6px;
-          padding: 4px 10px 4px 12px;
-          background: var(--primary-color-soft);
-          border: 1px solid rgba(59,130,246,0.35);
-          border-radius: 99px;
-          font-size: 12px; font-family: var(--mono);
-          color: #93c5fd;
+        .ds-filter-label { font-size:11px; color:#4b5563; font-family:ui-monospace,monospace; white-space:nowrap; }
+        .ds-filter-divider { width:1px; height:14px; background:rgba(30,58,138,0.3); margin:0 2px; }
+        .ds-filter-select { border:none; background:transparent; font-size:12px; color:#e5e7eb; font-family:ui-monospace,monospace; padding:2px 4px; cursor:pointer; outline:none; }
+        .ds-pills-row { display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+        .ds-pills-label { font-size:11px; color:#4b5563; font-family:ui-monospace,monospace; }
+        .ds-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 6px 2px 8px; border-radius:99px; font-size:11px; font-family:ui-monospace,monospace; }
+        .ds-pill-blue  { background:rgba(59,130,246,0.12); color:#93c5fd; border:1px solid rgba(59,130,246,0.25); }
+        .ds-pill-amber { background:rgba(245,158,11,0.12); color:#fcd34d; border:1px solid rgba(245,158,11,0.25); }
+        .ds-pill-x { background:none; border:none; cursor:pointer; font-size:12px; line-height:1; padding:0 1px; opacity:0.6; transition:opacity 0.15s; color:inherit; }
+        .ds-pill-x:hover { opacity:1; }
+        .ds-reset-link { font-size:11px; color:#4b5563; font-family:ui-monospace,monospace; cursor:pointer; text-decoration:underline; text-underline-offset:2px; margin-left:2px; }
+        .ds-reset-link:hover { color:#9ca3af; }
+        .accident-popup .leaflet-popup-content-wrapper {
+          background:#1e293b !important; border:1px solid #334155 !important;
+          border-radius:8px !important; box-shadow:0 4px 20px rgba(0,0,0,0.5) !important;
+          padding:0 !important;
         }
-        .ds-pill-x {
-          background: none; border: none; cursor: pointer;
-          color: #93c5fd; font-size: 14px; line-height: 1;
-          padding: 0; opacity: 0.7; transition: opacity 0.15s;
-        }
-        .ds-pill-x:hover { opacity: 1; }
+        .accident-popup .leaflet-popup-content { margin:10px 14px !important; }
+        .accident-popup .leaflet-popup-tip { background:#1e293b !important; }
       `}</style>
     </div>
   );

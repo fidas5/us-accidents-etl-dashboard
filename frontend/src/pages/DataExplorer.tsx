@@ -35,9 +35,6 @@ const PAGE_SIZE = 10;
 export default function DataExplorerPage() {
   const { token } = useAuth();
   const [data, setData]             = useState<Accident[]>([]);
-  const [total, setTotal]           = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [page, setPage]             = useState(1);
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState<string | null>(null);
 
@@ -46,12 +43,12 @@ export default function DataExplorerPage() {
   const [state, setState]       = useState("");
   const [year, setYear]         = useState("");
 
-  const fetchData = useCallback(async (p: number) => {
+  const fetchData = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, any> = { page: p, per_page: PAGE_SIZE };
+      const params: Record<string, any> = { page: 1, per_page: PAGE_SIZE };
       if (search)   params.city     = search;
       if (severity) params.severity = severity;
       if (state)    params.state    = state;
@@ -62,8 +59,6 @@ export default function DataExplorerPage() {
         { headers: { Authorization: `Bearer ${token}` }, params }
       );
       setData(res.data.data);
-      setTotal(res.data.total);
-      setTotalPages(res.data.total_pages);
     } catch (e: any) {
       setError(e.response?.data?.message ?? "Failed to load data");
     } finally {
@@ -71,8 +66,7 @@ export default function DataExplorerPage() {
     }
   }, [token, search, severity, state, year]);
 
-  useEffect(() => { setPage(1); fetchData(1); }, [search, severity, state, year]);
-  useEffect(() => { fetchData(page); }, [page]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleExport = () => {
     if (!data.length) return;
@@ -87,20 +81,6 @@ export default function DataExplorerPage() {
     const a = document.createElement("a");
     a.href = url; a.download = "accidents_export.csv"; a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const pageWindow = () => {
-    const pages: (number | "...")[] = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (page > 3) pages.push("...");
-      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
-      if (page < totalPages - 2) pages.push("...");
-      pages.push(totalPages);
-    }
-    return pages;
   };
 
   return (
@@ -193,24 +173,6 @@ export default function DataExplorerPage() {
           border-radius: 99px; font-size: 11px; font-weight: 500;
         }
 
-        .de-pagination {
-          display: flex; align-items: center; justify-content: space-between;
-          padding: 12px 16px;
-          background: var(--surface2);
-          border-top: 1px solid var(--border);
-          font-size: 13px; color: var(--text-muted);
-        }
-        .de-page-btns { display: flex; gap: 4px; }
-        .de-page-btn {
-          height: 28px; min-width: 28px; padding: 0 8px;
-          border: 1px solid var(--border); border-radius: 6px;
-          background: transparent; color: var(--text-muted);
-          font-size: 12px; cursor: pointer; transition: all 0.1s;
-        }
-        .de-page-btn:hover:not(:disabled) { background: var(--primary-color-soft); color: #93c5fd; }
-        .de-page-btn.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
-        .de-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-
         .de-loading {
           text-align: center; padding: 48px;
           color: var(--text-muted); font-size: 13px; font-family: var(--mono);
@@ -232,7 +194,7 @@ export default function DataExplorerPage() {
       <div className="de-header">
         <div>
           <h1 className="de-title">Data Explorer</h1>
-          <div className="de-sub">accidents_clean · {total.toLocaleString()} records</div>
+          <div className="de-sub">accidents_clean · showing first 10 records</div>
         </div>
         <div className="de-controls">
           <input
@@ -264,11 +226,11 @@ export default function DataExplorerPage() {
       <div className="de-kpis">
         <div className="de-kpi">
           <div className="de-kpi-label">Filtered rows</div>
-          <div className="de-kpi-value">{total.toLocaleString()}</div>
+          <div className="de-kpi-value">{data.length}</div>
         </div>
         <div className="de-kpi">
           <div className="de-kpi-label">Current page</div>
-          <div className="de-kpi-value">{page} / {totalPages || 1}</div>
+          <div className="de-kpi-value">1 / 1</div>
         </div>
         <div className="de-kpi">
           <div className="de-kpi-label">Per page</div>
@@ -301,7 +263,7 @@ export default function DataExplorerPage() {
                 const sev = SEV_COLORS[row.severity] ?? { bg: "var(--surface2)", color: "var(--text-muted)" };
                 return (
                   <tr key={row.id}>
-                    <td className="de-mono">{(page - 1) * PAGE_SIZE + i + 1}</td>
+                    <td className="de-mono">{i + 1}</td>
                     <td className="de-mono">{row.accident_id}</td>
                     <td>{row.city ?? "—"}</td>
                     <td>{row.state ?? "—"}</td>
@@ -320,21 +282,6 @@ export default function DataExplorerPage() {
             </tbody>
           </table>
         )}
-
-        <div className="de-pagination">
-          <span>Rows {Math.min((page-1)*PAGE_SIZE+1, total)}–{Math.min(page*PAGE_SIZE, total)} of {total.toLocaleString()}</span>
-          <div className="de-page-btns">
-            <button className="de-page-btn" onClick={() => setPage(p => p-1)} disabled={page === 1}>←</button>
-            {pageWindow().map((p, i) =>
-              p === "..." ? (
-                <span key={`dots-${i}`} style={{ padding: "0 4px", color: "var(--text-muted)", lineHeight: "28px" }}>…</span>
-              ) : (
-                <button key={p} className={`de-page-btn ${page === p ? "active" : ""}`} onClick={() => setPage(p as number)}>{p}</button>
-              )
-            )}
-            <button className="de-page-btn" onClick={() => setPage(p => p+1)} disabled={page === totalPages}>→</button>
-          </div>
-        </div>
       </div>
     </>
   );
