@@ -25,24 +25,28 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
     e.preventDefault();
     setMessage(null);
     setLoading(true);
+
     try {
-      const res = await axios.post<LoginResponse>("http://127.0.0.1:5050/auth/login", {
-        email,
-        password,
-      });
+      const res = await axios.post<LoginResponse>(
+        "http://127.0.0.1:5050/auth/login",
+        { email, password }
+      );
+
       if (res.data.access_token) {
         onLoggedIn(res.data.access_token, email);
       } else {
         setMessage(res.data.message || "Unexpected response from server.");
       }
     } catch (err: any) {
-      setMessage(err.response?.data?.message || "Login failed. Please check your credentials.");
+      setMessage(
+        err.response?.data?.message ||
+          "Login failed. Please check your credentials."
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // Move styles inside the component
   const styles: Record<string, React.CSSProperties> = {
     wrapper: {
       display: "flex",
@@ -50,89 +54,107 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
       justifyContent: "center",
       minHeight: "100vh",
       padding: "24px",
-      background: theme === "dark" ? "#060b18" : "#f8fafc",
+      background: "var(--bg-app)",
       position: "relative",
       overflow: "hidden",
       fontFamily: "'Syne', system-ui, sans-serif",
     },
+
     glowTop: {
       position: "absolute",
       width: 600,
       height: 600,
       borderRadius: "50%",
-      background: "radial-gradient(circle, rgba(59,130,246,0.14) 0%, transparent 70%)",
+      background:
+        theme === "dark"
+          ? "radial-gradient(circle, rgba(59,130,246,0.14), transparent 70%)"
+          : "radial-gradient(circle, rgba(59,130,246,0.06), transparent 70%)",
       top: -200,
       left: -100,
       pointerEvents: "none",
     },
+
     glowBottom: {
       position: "absolute",
       width: 500,
       height: 500,
       borderRadius: "50%",
-      background: "radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%)",
+      background:
+        theme === "dark"
+          ? "radial-gradient(circle, rgba(139,92,246,0.12), transparent 70%)"
+          : "radial-gradient(circle, rgba(139,92,246,0.05), transparent 70%)",
       bottom: -150,
       right: -80,
       pointerEvents: "none",
     },
+
     card: {
       position: "relative",
       width: "100%",
       maxWidth: 400,
-      background: "rgba(15, 23, 42, 0.9)",
-      border: "1px solid rgba(59,130,246,0.2)",
+      background: "var(--surface)",
+      border: "1px solid var(--border)",
       borderRadius: 20,
       padding: "32px 28px 28px",
-      boxShadow: "0 32px 80px rgba(0,0,0,0.5)",
+      boxShadow:
+        theme === "dark"
+          ? "0 32px 80px rgba(0,0,0,0.5)"
+          : "0 20px 40px rgba(0,0,0,0.08)",
       overflow: "hidden",
     },
+
     shimmer: {
       position: "absolute",
       top: 0,
       left: 0,
       right: 0,
       height: 1,
-      background: "linear-gradient(90deg, transparent, rgba(99,102,241,0.7), rgba(59,130,246,0.7), transparent)",
+      background:
+        "linear-gradient(90deg, transparent, var(--primary-color), transparent)",
     },
+
     brandRow: {
       display: "flex",
       alignItems: "center",
       gap: 10,
       marginBottom: 28,
     },
+
     brandIcon: {
       width: 34,
       height: 34,
-      background: "linear-gradient(135deg, #3b82f6, #6366f1)",
+      background: "var(--primary-color)",
       borderRadius: 10,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
+      color: "white",
     },
+
     brandName: {
       fontSize: 15,
       fontWeight: 800,
-      color: "#e5e7eb",
-      letterSpacing: "-0.3px",
+      color: "var(--text-main)",
     },
+
     heading: {
       fontSize: 24,
       fontWeight: 800,
-      color: "#f1f5f9",
-      letterSpacing: "-0.5px",
+      color: "var(--text)",
       margin: "0 0 4px",
     },
+
     subheading: {
       fontSize: 12,
-      color: "#64748b",
-      fontFamily: "'DM Mono', monospace",
-      letterSpacing: "0.03em",
+      color: "var(--text-muted)",
       margin: "0 0 24px",
     },
+
     form: {
       display: "flex",
       flexDirection: "column",
     },
+
     alert: {
       display: "flex",
       gap: 8,
@@ -142,47 +164,46 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
       borderRadius: 10,
       padding: "10px 12px",
       fontSize: 12,
-      color: "#f87171",
-      fontFamily: "'DM Mono', monospace",
+      color: "var(--accent)",
       marginBottom: 16,
     },
+
     fieldGroup: { marginBottom: 16 },
+
     fieldLabel: {
-      display: "block",
       fontSize: 11,
       fontWeight: 600,
-      color: "#94a3b8",
-      letterSpacing: "0.08em",
-      textTransform: "uppercase",
+      color: "var(--text-muted)",
       marginBottom: 7,
-      fontFamily: "'DM Mono', monospace",
+      textTransform: "uppercase",
     },
+
     inputRow: {
       display: "flex",
       alignItems: "center",
       gap: 10,
-      background: "rgba(30, 41, 59, 0.6)",
-      border: "1px solid rgba(71, 85, 105, 0.5)",
+      background: "var(--bg-input)",
+      border: "1px solid var(--border-subtle)",
       borderRadius: 10,
       padding: "0 14px",
-      transition: "border-color 0.2s, box-shadow 0.2s",
     },
+
     inputRowFocused: {
-      borderColor: "rgba(99,102,241,0.6)",
-      background: "rgba(30, 41, 59, 0.85)",
-      boxShadow: "0 0 0 3px rgba(99,102,241,0.08)",
+      borderColor: "var(--primary-color)",
+      background: "var(--surface)",
+      boxShadow: "0 0 0 3px var(--primary-color-soft)",
     },
+
     input: {
       flex: 1,
       height: 44,
       background: "transparent",
       border: "none",
       outline: "none",
-      color: "#e5e7eb",
+      color: "var(--text-main)",
       fontSize: 13,
-      fontFamily: "'DM Mono', monospace",
-      letterSpacing: "0.02em",
     },
+
     submitBtn: {
       display: "flex",
       alignItems: "center",
@@ -191,16 +212,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
       width: "100%",
       height: 46,
       marginTop: 8,
-      background: "linear-gradient(135deg, #3b82f6, #6366f1)",
+      background: "var(--primary-color)",
       border: "none",
       borderRadius: 10,
       color: "white",
       fontSize: 14,
       fontWeight: 700,
-      fontFamily: "'Syne', sans-serif",
-      letterSpacing: "0.02em",
-      transition: "opacity 0.2s, transform 0.1s",
+      cursor: "pointer",
     },
+
     btnArrow: {
       width: 20,
       height: 20,
@@ -210,16 +230,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
       alignItems: "center",
       justifyContent: "center",
     },
+
     footerText: {
       textAlign: "center",
       fontSize: 12,
-      color: "#475569",
-      fontFamily: "'DM Mono', monospace",
+      color: "var(--text-muted)",
       marginTop: 20,
-      margin: "20px 0 0",
     },
+
     footerLink: {
-      color: "#818cf8",
+      color: "var(--primary-color)",
       textDecoration: "none",
     },
   };
@@ -234,26 +254,37 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
 
         <div style={styles.brandRow}>
           <div style={styles.brandIcon}>
-            <Layers size={16} color="white" />
+            <Layers size={16} />
           </div>
-          <span style={styles.brandName}>Plateforme ETL & Dashboard Accidents Routiers</span>
+          <span style={styles.brandName}>
+            Plateforme ETL & Dashboard Accidents Routiers
+          </span>
         </div>
 
         <h1 style={styles.heading}>Welcome back</h1>
-        <p style={styles.subheading}>sign in to continue to your dashboard</p>
+        <p style={styles.subheading}>
+          sign in to continue to your dashboard
+        </p>
 
         <form onSubmit={handleSubmit} style={styles.form}>
           {message && (
             <div style={styles.alert}>
-              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <AlertCircle size={14} />
               <span>{message}</span>
             </div>
           )}
 
           <div style={styles.fieldGroup}>
             <label style={styles.fieldLabel}>Email</label>
-            <div style={{ ...styles.inputRow, ...(focusedField === "email" ? styles.inputRowFocused : {}) }}>
-              <Mail size={15} color={focusedField === "email" ? "#818cf8" : "#475569"} />
+            <div
+              style={{
+                ...styles.inputRow,
+                ...(focusedField === "email"
+                  ? styles.inputRowFocused
+                  : {}),
+              }}
+            >
+              <Mail size={15} color="var(--text-muted)" />
               <input
                 type="email"
                 value={email}
@@ -269,8 +300,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
 
           <div style={styles.fieldGroup}>
             <label style={styles.fieldLabel}>Password</label>
-            <div style={{ ...styles.inputRow, ...(focusedField === "password" ? styles.inputRowFocused : {}) }}>
-              <Lock size={15} color={focusedField === "password" ? "#818cf8" : "#475569"} />
+            <div
+              style={{
+                ...styles.inputRow,
+                ...(focusedField === "password"
+                  ? styles.inputRowFocused
+                  : {}),
+              }}
+            >
+              <Lock size={15} color="var(--text-muted)" />
               <input
                 type="password"
                 value={password}
@@ -287,7 +325,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
           <button
             type="submit"
             disabled={loading}
-            style={{ ...styles.submitBtn, opacity: loading ? 0.7 : 1, cursor: loading ? "not-allowed" : "pointer" }}
+            style={{
+              ...styles.submitBtn,
+              opacity: loading ? 0.7 : 1,
+            }}
           >
             {loading ? "Signing in…" : "Sign in"}
             {!loading && (
@@ -300,7 +341,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoggedIn }) => {
 
         <p style={styles.footerText}>
           No account?{" "}
-          <Link to="/register" style={styles.footerLink}>Create one →</Link>
+          <Link to="/register" style={styles.footerLink}>
+            Create one →
+          </Link>
         </p>
       </div>
     </div>

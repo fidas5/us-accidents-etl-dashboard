@@ -5,6 +5,7 @@ from flask_jwt_extended import JWTManager
 from sqlalchemy import text
 from flask_cors import CORS
 from flask_mail import Mail
+from sqlalchemy import inspect
 
 from .config import Config
 
@@ -17,26 +18,46 @@ mail = Mail()
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    CORS(app)
+    
+    # Configure CORS properly
+    CORS(app, 
+         origins=["http://localhost:5173", "http://localhost:3000"],
+         supports_credentials=True,
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
+    # ── 1. Bind extensions to the app ──────────────────────────────────────
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
     mail.init_app(app)
 
-    # NE RIEN IMPORTER AVANT ÇA
-    from . import models  # noqa: F401
+    # ── 2. Import models AFTER db is initialised ──────────────────────────
+    from . import models  # This imports everything from models.py
+
+    # ── 3. Create tables inside the app context ────────────────────────────
+    with app.app_context():
+        db.create_all()
+        print("✅ Database tables created/verified successfully")
+        
+        # Get table names using inspect (works with newer SQLAlchemy)
+        inspector = inspect(db.engine)
+        tables = inspector.get_table_names()
+        print(f"   Tables: {', '.join(tables)}")
+
+    # ── 4. Register blueprints ─────────────────────────────────────────────
     from .routes.auth import auth_bp
     from .routes.etl import etl_bp
     from .routes.stats import stats_bp
-    from .routes.accidents import accidents_bp 
-    from .routes.predict import predict_bp
-    app.register_blueprint(predict_bp)
-    app.register_blueprint(auth_bp)   # url_prefix dans auth_bp
-    app.register_blueprint(etl_bp)    # url_prefix dans etl_bp
-    app.register_blueprint(stats_bp)  # url_prefix dans stats_bp
-    app.register_blueprint(accidents_bp)  # url_prefix dans accidents_bp
+    from .routes.datamart import datamart_bp 
 
+    app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(etl_bp, url_prefix="/etl")
+    app.register_blueprint(stats_bp, url_prefix="/api/stats")
+
+    app.register_blueprint(datamart_bp, url_prefix="/etl")
+
+    # ── 5. Health check ────────────────────────────────────────────────────
     @app.route("/health")
     def health():
         try:

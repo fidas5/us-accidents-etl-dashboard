@@ -1,3 +1,4 @@
+// src/context/AuthContext.tsx
 import React, {
   createContext,
   useContext,
@@ -10,12 +11,15 @@ import axios from "axios";
 
 interface User {
   email: string;
+  id?: number;
+  nom?: string;
+  prenom?: string;
 }
 
 interface AuthContextValue {
   user: User | null;
   token: string | null;
-  login: (token: string, email: string) => void;
+  login: (token: string, email: string, userData?: any) => void;
   logout: () => void;
 }
 
@@ -24,10 +28,9 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const TOKEN_KEY = "access_token";
 const EMAIL_KEY = "user_email";
 const EXPIRES_KEY = "expires_at";
-const SESSION_DURATION = 60 * 60 * 1000;
+const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // ✅ Lazy init — reads localStorage synchronously before first render
   const [token, setToken] = useState<string | null>(() => {
     const storedToken = localStorage.getItem(TOKEN_KEY);
     const expiresAt = localStorage.getItem(EXPIRES_KEY);
@@ -54,7 +57,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(EXPIRES_KEY);
   }, []);
 
-  // ✅ Auto-logout timer — fires exactly when session expires
   useEffect(() => {
     if (!token) return;
     const expiresAt = Number(localStorage.getItem(EXPIRES_KEY));
@@ -67,25 +69,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [token, logout]);
 
-  // ✅ Axios interceptor — catches 401 from any API call
+  // ✅ Fix: Better interceptor that checks for valid token
   useEffect(() => {
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) logout();
+        if (error.response?.status === 401) {
+          console.log("401 detected - logging out");
+          logout();
+        }
         return Promise.reject(error);
       }
     );
     return () => axios.interceptors.response.eject(interceptor);
   }, [logout]);
 
-  const login = useCallback((accessToken: string, email: string) => {
+  // ✅ Add request interceptor to ensure token is always included
+  useEffect(() => {
+    const requestInterceptor = axios.interceptors.request.use(
+      (config) => {
+        const currentToken = localStorage.getItem(TOKEN_KEY);
+        if (currentToken) {
+          config.headers.Authorization = `Bearer ${currentToken}`;
+        }
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
+    return () => axios.interceptors.request.eject(requestInterceptor);
+  }, []);
+
+  const login = useCallback((accessToken: string, email: string, userData?: any) => {
     const expiresAt = Date.now() + SESSION_DURATION;
     setToken(accessToken);
-    setUser({ email });
+    setUser({ email, ...userData });
     localStorage.setItem(TOKEN_KEY, accessToken);
     localStorage.setItem(EMAIL_KEY, email);
     localStorage.setItem(EXPIRES_KEY, String(expiresAt));
+    
+    // Set default Authorization header for all future requests
+    axios.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
   }, []);
 
   return (

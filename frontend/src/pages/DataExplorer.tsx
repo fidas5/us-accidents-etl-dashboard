@@ -253,8 +253,8 @@ export default function DataExplorerPage() {
                 <th>State</th>
                 <th>Severity</th>
                 <th>Start Time</th>
-                <th>Temp (°F)</th>
-                <th>Visibility</th>
+                <th>Temperature (°C)</th>
+                <th>Visibility (km)</th>
                 <th>Weather</th>
               </tr>
             </thead>

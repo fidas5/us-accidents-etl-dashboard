@@ -37,8 +37,9 @@ export default function PredictPage() {
   const { token } = useAuth();
   const [form, setForm] = useState<PredictForm>({
     latitude: 34.05, longitude: -118.24,
-    hour: 8, temperature: 65,
-    visibility: 10, weather_condition: "Clear",
+    hour: 8, temperature: 18, // Changed to Celsius (65°F ≈ 18°C)
+    visibility: 16, // Changed to km (10 miles ≈ 16 km)
+    weather_condition: "Clear",
   });
   const [result, setResult]   = useState<PredictResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -119,7 +120,7 @@ export default function PredictPage() {
         .pr-slider { flex: 1; accent-color: var(--primary-color); }
         .pr-slider-val {
           font-size: 13px; color: #93c5fd;
-          font-family: var(--mono); min-width: 48px; text-align: right;
+          font-family: var(--mono); min-width: 60px; text-align: right;
         }
 
         .pr-hour-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
@@ -246,22 +247,22 @@ export default function PredictPage() {
           </div>
 
           <div className="pr-field">
-            <label className="pr-label">Temperature — {form.temperature}°F</label>
+            <label className="pr-label">Temperature — {form.temperature}°C</label>
             <div className="pr-slider-wrap">
-              <input type="range" className="pr-slider" min={-20} max={120} step={1}
+              <input type="range" className="pr-slider" min={-30} max={50} step={1}
                 value={form.temperature}
                 onChange={e => set("temperature", Number(e.target.value))} />
-              <span className="pr-slider-val">{form.temperature}°F</span>
+              <span className="pr-slider-val">{form.temperature}°C</span>
             </div>
           </div>
 
           <div className="pr-field">
-            <label className="pr-label">Visibility — {form.visibility} mi</label>
+            <label className="pr-label">Visibility — {form.visibility} km</label>
             <div className="pr-slider-wrap">
-              <input type="range" className="pr-slider" min={0} max={10} step={0.5}
+              <input type="range" className="pr-slider" min={0} max={50} step={0.5}
                 value={form.visibility}
                 onChange={e => set("visibility", Number(e.target.value))} />
-              <span className="pr-slider-val">{form.visibility} mi</span>
+              <span className="pr-slider-val">{form.visibility} km</span>
             </div>
           </div>
 
@@ -344,8 +345,8 @@ export default function PredictPage() {
                   ["Latitude",    form.latitude],
                   ["Longitude",   form.longitude],
                   ["Hour",        `${String(form.hour).padStart(2,"0")}:00`],
-                  ["Temperature", `${form.temperature}°F`],
-                  ["Visibility",  `${form.visibility} mi`],
+                  ["Temperature", `${form.temperature}°C`],
+                  ["Visibility",  `${form.visibility} km`],
                   ["Weather",     form.weather_condition],
                 ] as [string, any][]).map(([k, v]) => (
                   <div key={k} className="pr-summary-row">

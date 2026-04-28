@@ -1,4 +1,5 @@
 import os   # Module pour accéder aux variables d'environnement système
+from datetime import timedelta 
 
 class Config:
      # Clé secrète pour signer les sessions/cookies/CSRF
@@ -8,9 +9,13 @@ class Config:
         "DATABASE_URL",
         "postgresql://postgres:fida@localhost:5000/us_accidents_db"
     )
-        # Désactive le tracking des modifications (évite les warnings perf)
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-jwt-secret") 
+    # FIX: Use a consistent strong secret key
+    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
+    JWT_TOKEN_LOCATION = ["headers"]
+    JWT_HEADER_NAME = "Authorization"
+    JWT_HEADER_TYPE = "Bearer"
+    
  # Email
     MAIL_SERVER = os.getenv("MAIL_SERVER")
     MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
