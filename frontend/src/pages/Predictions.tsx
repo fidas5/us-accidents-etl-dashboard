@@ -207,7 +207,7 @@ export default function PredictPage() {
       `}</style>
 
       <h1 className="pr-title">Severity Prediction</h1>
-      <p className="pr-sub">Predict accident severity · Random Forest · 79% accuracy</p>
+      <p className="pr-sub">Predict accident severity</p>
 
       <div className="pr-layout">
 

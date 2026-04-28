@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   Upload, Play, CheckCircle2, AlertCircle, Loader,
   Lock, BarChart3, RefreshCw, PlayCircle, History,
-  ChevronDown, ChevronUp, Database, Zap,
+  ChevronDown, ChevronUp, Database, Zap, RotateCcw,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -21,6 +21,13 @@ interface JobResult {
   missing?: string[];
   year_distribution?: Record<string, number>;
   filter_applied?: string;
+  new_dimensions?: {
+    time: number;
+    location: number;
+    weather: number;
+    road: number;
+  };
+  total_facts?: number;
 }
 
 interface Job {
@@ -117,7 +124,7 @@ const JOBS: Job[] = [
   {
     id: "build-datamart",
     label: "Build Datamart",
-    description: "Create star schema dimensions and fact table for analytics",
+    description: "Create star schema dimensions and fact table for analytics (incremental)",
     endpoint: "/etl/build-datamart",
     dependsOn: "build-clean",
     lockHint: 'Complete "Build Clean" first',
@@ -152,7 +159,6 @@ function fmtDuration(s: number) {
 }
 
 // ─── Helper: should we show the pipeline panel? ───────────────────────────────
-// Show only when at least one step has started BUT the pipeline is not fully done.
 function shouldShowPipeline(status: PipelineStatus): boolean {
   const nothingStarted =
     !status.csv_exists &&
@@ -202,13 +208,18 @@ export default function ETLPage() {
   // Pipeline-level error banner
   const [pipelineError, setPipelineError] = useState<string | null>(null);
 
-  // Tracks which job_id is mid-cancellation so we can show a loading state on its button
-  const [cancellingJob, setCancellingJob] = useState<string | null>(null);
-
   // Dedupe refs
   const analysisDoneRef = useRef(false);
   const analysisInProgressRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
+
+  // ── Reset all jobs ──────────────────────────────────────────────────────────
+  const resetAllJobs = () => {
+    setJobStatus({});
+    setJobResult({});
+    setPipelineError(null);
+    checkPipelineStatus();
+  };
 
   // ── Auth header helper ──────────────────────────────────────────────────────
   const authHeaders = useCallback(
@@ -264,17 +275,9 @@ export default function ETLPage() {
       setUploadStatus("success");
       setUploadMsg(res.data.message ?? "Uploaded successfully");
       
-      // Reset analysis flag to force fresh analysis
       analysisDoneRef.current = false;
-      
-      // Wait a moment for the backend to fully process the file
-      // Then analyze without triggering pipeline status check
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Force fresh analysis
       await analyzeCSV(true);
-      
-      // Now check pipeline status (this will also try to analyze, but analysisDoneRef is now true)
       await checkPipelineStatus();
       
     } catch (err) {
@@ -289,10 +292,8 @@ export default function ETLPage() {
     async (forceRefresh = false) => {
       if (!token) return;
       
-      // Don't analyze if we already have analysis and not forcing refresh
       if (!forceRefresh && analysisDoneRef.current && csvAnalysis) return;
       
-      // Prevent concurrent analyses
       if (analysisInProgressRef.current) {
         console.log("Analysis already in progress, skipping...");
         return;
@@ -317,10 +318,8 @@ export default function ETLPage() {
         }
       } catch (err) {
         const msg = extractErrorMessage(err);
-        // Don't show error for 401s (auth issues)
         if (!(err instanceof AxiosError && err.response?.status === 401)) {
           setPipelineError(`CSV analysis failed: ${msg}`);
-          // Reset analysis flag on error so we can retry
           analysisDoneRef.current = false;
         }
       } finally {
@@ -353,9 +352,7 @@ export default function ETLPage() {
         return next;
       });
 
-      // Only analyze if CSV exists, analysis not done, and not already analyzing
       if (data.csv_exists && !analysisDoneRef.current && !analysisInProgressRef.current) {
-        // Add a small delay to ensure file is fully processed
         setTimeout(() => {
           analyzeCSV(false);
         }, 500);
@@ -397,26 +394,9 @@ export default function ETLPage() {
       });
       setRunningJobs(res.data.running_jobs ?? []);
     } catch {
-      // Silent — polling failure is non-critical
+      // Silent
     }
   }, [token, authHeaders]);
-
-  // ── Cancel a running job ────────────────────────────────────────────────────
-  const cancelJob = useCallback(async (jobId: string) => {
-    if (!token) return;
-    setCancellingJob(jobId);
-    try {
-      await axios.post(`${API}/etl/cancel-job/${jobId}`, {}, {
-        headers: authHeaders(),
-      });
-      // Give the server a moment then refresh so the toast updates
-      await fetchRunningJobs();
-    } catch (err) {
-      console.error("Failed to cancel job:", extractErrorMessage(err));
-    } finally {
-      setCancellingJob(null);
-    }
-  }, [token, authHeaders, fetchRunningJobs]);
 
   // ── Run a single job ────────────────────────────────────────────────────────
   const runJob = async (job: Job) => {
@@ -430,9 +410,7 @@ export default function ETLPage() {
       payload.year = selectedYear;
     }
 
-    // Datamart can take 20-40 min for large datasets — use 0 (no timeout).
-    // Other jobs get a generous 10 min.
-    const timeout = job.id === "build-datamart" ? 0 : 600_000;
+    const timeout = 0;
 
     try {
       const res = await axios.post(`${API}${job.endpoint}`, payload, {
@@ -444,52 +422,10 @@ export default function ETLPage() {
       await fetchJobHistory();
       await checkPipelineStatus();
     } catch (err) {
-      // If the request timed out the job is still running on the server.
-      // Switch the UI to "loading" (running) state instead of "error" and
-      // let the polling loop detect completion via running-jobs / pipeline-status.
-      const isTimeout =
-        err instanceof AxiosError && err.code === "ECONNABORTED";
-
-      if (isTimeout) {
-        // Keep the row in "loading" state — polling will update it when done.
-        setJobStatus((s) => ({ ...s, [job.id]: "loading" }));
-        setJobResult((r) => ({
-          ...r,
-          [job.id]: {
-            message: "Still running on the server — monitoring progress below…",
-          },
-        }));
-        // Start an aggressive poll until the job disappears from running-jobs
-        // then refresh pipeline status.
-        const waitForCompletion = async () => {
-          for (let i = 0; i < 360; i++) {          // max ~30 min extra wait
-            await new Promise((r) => setTimeout(r, 5_000));
-            await fetchRunningJobs();
-            const res2 = await axios.get(`${API}/etl/running-jobs`, {
-              headers: authHeaders(),
-            });
-            const still = (res2.data.running_jobs ?? []).some(
-              (j: RunningJob) => j.name === job.label.toLowerCase().replace(" ", "-") ||
-                                 j.name === job.endpoint.replace("/etl/", "")
-            );
-            if (!still) {
-              await checkPipelineStatus();
-              await fetchJobHistory();
-              // Pipeline status will set job state to success/partial
-              break;
-            }
-          }
-        };
-        waitForCompletion();
-        return;
-      }
-
       setJobStatus((s) => ({ ...s, [job.id]: "error" }));
       const msg = extractErrorMessage(err);
-      const detail =
-        err instanceof AxiosError ? err.response?.data?.detail : undefined;
-      const missing =
-        err instanceof AxiosError ? (err.response?.data?.missing ?? []) : [];
+      const detail = err instanceof AxiosError ? err.response?.data?.detail : undefined;
+      const missing = err instanceof AxiosError ? (err.response?.data?.missing ?? []) : [];
       setJobResult((r) => ({
         ...r,
         [job.id]: { message: msg, detail, missing },
@@ -524,8 +460,7 @@ export default function ETLPage() {
         const payload: Record<string, unknown> = {};
         if (stepId === "load-raw") payload.year = selectedYear;
 
-        // Same rule: no timeout for the datamart step
-        const timeout = stepId === "build-datamart" ? 0 : 600_000;
+        const timeout = 0;
 
         try {
           const res = await axios.post(`${API}${job.endpoint}`, payload, {
@@ -536,14 +471,7 @@ export default function ETLPage() {
           setJobResult((r) => ({ ...r, [stepId]: res.data }));
           await checkPipelineStatus();
         } catch (err) {
-          const isTimeout =
-            err instanceof AxiosError && err.code === "ECONNABORTED";
-          if (isTimeout) {
-            // Keep loading — background polling will resolve it
-            setJobStatus((s) => ({ ...s, [stepId]: "loading" }));
-            break;
-          }
-          throw err;   // re-throw real errors to the outer catch
+          throw err;
         }
       }
 
@@ -572,7 +500,6 @@ export default function ETLPage() {
     return () => clearInterval(interval);
   }, [token, fetchRunningJobs]);
 
-  // Poll pipeline status every 15s normally, every 5s while a job is running
   useEffect(() => {
     if (!token) return;
     const anyLoading = Object.values(jobStatus).some((s) => s === "loading");
@@ -593,9 +520,6 @@ export default function ETLPage() {
   }, [token, checkPipelineStatus, fetchJobHistory]);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Render helpers
-  // ─────────────────────────────────────────────────────────────────────────────
-
   const statusIcon = (status: JobStatus) => {
     if (status === "loading") return <Loader size={14} className="etl-spin" />;
     if (status === "success") return <CheckCircle2 size={14} color="#4ade80" />;
@@ -631,67 +555,68 @@ export default function ETLPage() {
         }
         .etl-error-dismiss:hover { opacity: 1; }
 
-       /* ── Pipeline Status (Compact) ──────────────────────────────────────── */
-.etl-pipeline {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
-}
-.etl-pipeline-hd {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 12px;
-}
-.etl-pipeline-title {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 10px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--text-main);
-}
-.etl-pipeline-refresh {
-  background: transparent; border: 1px solid var(--border);
-  border-radius: 5px; padding: 3px 7px; cursor: pointer;
-  color: var(--text-muted); transition: all .15s;
-  display: flex; align-items: center; gap: 3px; font-size: 10px;
-}
-.etl-pipeline-refresh:hover { border-color: #3b82f6; color: #3b82f6; }
-.etl-pipeline-refresh:disabled { opacity: .4; cursor: not-allowed; }
+        /* ── Pipeline Status (Compact) ──────────────────────────────────────── */
+        .etl-pipeline {
+          background: var(--surface); border: 1px solid var(--border);
+          border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+        }
+        .etl-pipeline-hd {
+          display: flex; justify-content: space-between; align-items: center;
+          margin-bottom: 12px;
+        }
+        .etl-pipeline-title {
+          display: flex; align-items: center; gap: 6px;
+          font-size: 10px; font-weight: 600; text-transform: uppercase;
+          letter-spacing: .05em; color: var(--text-main);
+        }
+        .etl-pipeline-refresh {
+          background: transparent; border: 1px solid var(--border);
+          border-radius: 5px; padding: 3px 7px; cursor: pointer;
+          color: var(--text-muted); transition: all .15s;
+          display: flex; align-items: center; gap: 3px; font-size: 10px;
+        }
+        .etl-pipeline-refresh:hover { border-color: #3b82f6; color: #3b82f6; }
+        .etl-pipeline-refresh:disabled { opacity: .4; cursor: not-allowed; }
 
-.etl-pipeline-steps {
-  display: flex; flex-wrap: wrap;
-  gap: 6px; margin-bottom: 12px;
-}
-.etl-ps {
-  display: flex; align-items: center;
-  gap: 6px; padding: 5px 8px;
-  border-radius: 6px; border: 1px solid var(--border);
-  background: var(--surface2); transition: border-color .2s;
-  flex: 1 0 auto; min-width: 0;
-}
-.etl-ps.ps-done    { border-color: rgba(74,222,128,.4); background: rgba(74,222,128,.04); }
-.etl-ps.ps-partial { border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.04); }
-.etl-ps-icon  { font-size: 16px; flex-shrink: 0; }
-.etl-ps-name  { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); white-space: nowrap; }
-.etl-ps.ps-done    .etl-ps-name { color: #4ade80; }
-.etl-ps.ps-partial .etl-ps-name { color: #fbbf24; }
-.etl-ps-count { font-size: 10px; color: var(--text-muted); font-family: monospace; flex-shrink: 0; }
-.etl-ps-warn  { font-size: 8px; color: #fbbf24; flex-shrink: 0; display: inline-flex; align-items: center; gap: 2px; }
-.etl-ps-prog  { width: 40px; flex-shrink: 0; }
-.etl-ps-bar   { height: 2px; background: #fbbf24; border-radius: 1px; transition: width .4s; }
-.etl-ps-pct   { font-size: 7px; color: var(--text-muted); display: block; margin-top: 1px; line-height: 1; }
+        .etl-pipeline-steps {
+          display: flex; flex-wrap: wrap;
+          gap: 6px; margin-bottom: 12px;
+        }
+        .etl-ps {
+          display: flex; align-items: center;
+          gap: 6px; padding: 5px 8px;
+          border-radius: 6px; border: 1px solid var(--border);
+          background: var(--surface2); transition: border-color .2s;
+          flex: 1 0 auto; min-width: 0;
+        }
+        .etl-ps.ps-done    { border-color: rgba(74,222,128,.4); background: rgba(74,222,128,.04); }
+        .etl-ps.ps-partial { border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.04); }
+        .etl-ps-icon  { font-size: 16px; flex-shrink: 0; }
+        .etl-ps-name  { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); white-space: nowrap; }
+        .etl-ps.ps-done    .etl-ps-name { color: #4ade80; }
+        .etl-ps.ps-partial .etl-ps-name { color: #fbbf24; }
+        .etl-ps-count { font-size: 10px; color: var(--text-muted); font-family: monospace; flex-shrink: 0; }
+        .etl-ps-warn  { font-size: 8px; color: #fbbf24; flex-shrink: 0; display: inline-flex; align-items: center; gap: 2px; }
+        .etl-ps-prog  { width: 40px; flex-shrink: 0; }
+        .etl-ps-bar   { height: 2px; background: #fbbf24; border-radius: 1px; transition: width .4s; }
+        .etl-ps-pct   { font-size: 7px; color: var(--text-muted); display: block; margin-top: 1px; line-height: 1; }
 
-.etl-resume-btn {
-  width: 100%; padding: 8px; border: none; border-radius: 7px; cursor: pointer;
-  font-size: 12px; font-weight: 500; color: white;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  transition: all .2s; margin-top: 2px;
-}
-.etl-resume-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(59,130,246,.3); }
-.etl-resume-btn:disabled { opacity: .5; cursor: not-allowed; }
+        .etl-resume-btn {
+          width: 100%; padding: 8px; border: none; border-radius: 7px; cursor: pointer;
+          font-size: 12px; font-weight: 500; color: white;
+          background: linear-gradient(135deg, #3b82f6, #6366f1);
+          display: flex; align-items: center; justify-content: center; gap: 6px;
+          transition: all .2s; margin-top: 2px;
+        }
+        .etl-resume-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(59,130,246,.3); }
+        .etl-resume-btn:disabled { opacity: .5; cursor: not-allowed; }
 
-.etl-pipeline-warn {
-  display: flex; align-items: center; gap: 6px;
-  margin-top: 6px; padding: 5px 10px; border-radius: 5px;
-  background: rgba(251,191,36,.08); color: #fbbf24; font-size: 10px;
-}
+        .etl-pipeline-warn {
+          display: flex; align-items: center; gap: 6px;
+          margin-top: 6px; padding: 5px 10px; border-radius: 5px;
+          background: rgba(251,191,36,.08); color: #fbbf24; font-size: 10px;
+        }
+
         /* ── Running jobs toast ───────────────────────────────────── */
         .etl-running {
           position: fixed; bottom: 24px; right: 24px; width: 300px;
@@ -706,27 +631,14 @@ export default function ETLPage() {
           font-size: 11px; font-weight: 600; color: var(--text-main);
         }
         .etl-running-item {
-          display: flex; justify-content: space-between; align-items: center;
-          padding: 10px 14px; border-bottom: 1px solid var(--border); gap: 10px;
+          display: flex; justify-content: space-between;
+          padding: 10px 14px;
+          border-bottom: 1px solid var(--border);
         }
         .etl-running-item:last-child { border-bottom: none; }
-        .etl-running-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
-        .etl-running-name { font-size: 12px; font-weight: 500; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .etl-running-info { display: flex; flex-direction: column; gap: 3px; }
+        .etl-running-name { font-size: 12px; font-weight: 500; color: var(--text-main); }
         .etl-running-dur  { font-size: 10px; color: var(--text-muted); font-family: monospace; }
-        .etl-running-cancel {
-          display: flex; align-items: center; gap: 5px; flex-shrink: 0;
-          padding: 6px 12px; border-radius: 7px;
-          background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3);
-          color: #f87171; font-size: 11px; font-weight: 500;
-          cursor: pointer; transition: all .15s; white-space: nowrap;
-        }
-        .etl-running-cancel:hover:not(:disabled) {
-          background: rgba(239,68,68,.22); border-color: #f87171;
-          box-shadow: 0 0 0 2px rgba(239,68,68,.15);
-        }
-        .etl-running-cancel:disabled {
-          opacity: .55; cursor: not-allowed;
-        }
 
         /* ── Main grid ────────────────────────────────────────────── */
         .etl-grid {
@@ -771,6 +683,20 @@ export default function ETLPage() {
         }
         .etl-btn:hover:not(:disabled) { filter: brightness(1.1); }
         .etl-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+        .etl-reset-btn {
+          margin-top: 12px;
+          width: 100%; height: 36px; border-radius: 8px;
+          font-size: 12px; font-weight: 500; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; gap: 6px;
+          background: rgba(239,68,68,0.1); color: #f87171;
+          border: 1px solid rgba(239,68,68,0.3);
+          transition: all .15s;
+        }
+        .etl-reset-btn:hover {
+          background: rgba(239,68,68,0.2);
+          border-color: #f87171;
+        }
 
         .etl-result {
           margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 12px;
@@ -820,10 +746,7 @@ export default function ETLPage() {
           gap: 4px;
           transition: all .15s;
         }
-        .etl-year-refresh-btn:hover {
-          border-color: #3b82f6;
-          color: #93c5fd;
-        }
+        .etl-year-refresh-btn:hover { border-color: #3b82f6; color: #93c5fd; }
 
         /* ── Job rows ─────────────────────────────────────────────── */
         .etl-jobs-list { display: flex; flex-direction: column; gap: 10px; }
@@ -967,31 +890,19 @@ export default function ETLPage() {
       `}</style>
 
       <div className="etl-page">
-        {/* Header */}
         <div className="etl-header">
           <h1 className="etl-title">ETL Pipeline</h1>
           <p className="etl-sub">Upload dataset → analyze → select year → run pipeline</p>
         </div>
 
-        {/* Error banner */}
         {pipelineError && (
           <div className="etl-error-banner">
             <AlertCircle size={14} />
             <span>{pipelineError}</span>
-            <button
-              className="etl-error-dismiss"
-              onClick={() => setPipelineError(null)}
-              aria-label="Dismiss"
-            >×</button>
+            <button className="etl-error-dismiss" onClick={() => setPipelineError(null)}>×</button>
           </div>
         )}
 
-        {/*
-          Pipeline Status Panel:
-          Only shown when at least one step has been started
-          AND the full pipeline is not yet complete.
-          Once everything is done it disappears — history is the record of past runs.
-        */}
         {pipelineStatus && shouldShowPipeline(pipelineStatus) && (
           <PipelineStatusPanel
             status={pipelineStatus}
@@ -1003,108 +914,61 @@ export default function ETLPage() {
           />
         )}
 
-        {/*
-          Running Jobs Toast:
-          Only visible while jobs are actively executing.
-          Auto-hides within 5 s of completion (next poll cycle).
-          Includes a Stop button for cooperative cancellation.
-        */}
         {runningJobs.length > 0 && (
           <div className="etl-running">
             <div className="etl-running-hd">
               <Loader size={13} className="etl-spin" />
               Running Jobs ({runningJobs.length})
             </div>
-            {runningJobs.map((j) => {
-              const jid = String(j.job_id);
-              const isCancelling = cancellingJob === jid;
-              return (
-                <div key={jid} className="etl-running-item">
-                  <div className="etl-running-info">
-                    <div className="etl-running-name">{j.name}</div>
-                    <div className="etl-running-dur">{fmtDuration(j.duration_seconds)}</div>
-                  </div>
-                  <button
-                    className="etl-running-cancel"
-                    onClick={() => cancelJob(jid)}
-                    disabled={isCancelling}
-                    title="Request cooperative cancellation — job stops after the current batch"
-                  >
-                    {isCancelling
-                      ? <><Loader size={11} className="etl-spin" /> Stopping…</>
-                      : <>■ Stop</>}
-                  </button>
+            {runningJobs.map((j) => (
+              <div key={j.job_id} className="etl-running-item">
+                <div className="etl-running-info">
+                  <div className="etl-running-name">{j.name}</div>
+                  <div className="etl-running-dur">{fmtDuration(j.duration_seconds)}</div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Main grid */}
         <div className="etl-grid">
-          {/* ── Upload card ── */}
+          {/* Upload card */}
           <div className="etl-card">
             <div className="etl-card-title">Step 1 — Upload CSV</div>
             <div className="etl-card-desc">US Accidents dataset (any year range)</div>
 
             <div
-              className={`etl-upload-zone ${
-                colErrors.length > 0 ? "zone-invalid" : colOk ? "zone-valid" : ""
-              }`}
+              className={`etl-upload-zone ${colErrors.length > 0 ? "zone-invalid" : colOk ? "zone-valid" : ""}`}
               onClick={() => fileRef.current?.click()}
             >
-              <Upload
-                size={22}
-                color={colErrors.length > 0 ? "#f87171" : colOk ? "#4ade80" : "#3b82f6"}
-              />
+              <Upload size={22} color={colErrors.length > 0 ? "#f87171" : colOk ? "#4ade80" : "#3b82f6"} />
               <span className="etl-upload-label">Click to browse or drag & drop</span>
               <span className="etl-upload-label" style={{ fontSize: 10 }}>.csv files only</span>
               {file && <div className="etl-file-name">{file.name}</div>}
             </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv"
-              style={{ display: "none" }}
-              onChange={handleFileChange}
-            />
+            <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={handleFileChange} />
 
             {colErrors.length > 0 && (
               <div className="etl-col-errors">
-                <strong>Missing required columns:</strong>
-                {colErrors.join(", ")}
+                <strong>Missing required columns:</strong> {colErrors.join(", ")}
               </div>
             )}
 
             <button
               className="etl-btn"
-              disabled={
-                !file ||
-                uploadStatus === "loading" ||
-                uploadStatus === "success" ||
-                colErrors.length > 0
-              }
+              disabled={!file || uploadStatus === "loading" || uploadStatus === "success" || colErrors.length > 0}
               onClick={handleUpload}
             >
-              {uploadStatus === "loading" ? (
-                <><Loader size={13} className="etl-spin" /> Uploading…</>
-              ) : uploadStatus === "success" ? (
-                <><CheckCircle2 size={13} /> Uploaded</>
-              ) : (
-                <><Upload size={13} /> Upload File</>
-              )}
+              {uploadStatus === "loading" ? <><Loader size={13} className="etl-spin" /> Uploading…</> : uploadStatus === "success" ? <><CheckCircle2 size={13} /> Uploaded</> : <><Upload size={13} /> Upload File</>}
             </button>
 
             {uploadMsg && (
               <div className={`etl-result ${uploadStatus === "success" ? "res-ok" : "res-err"}`}>
-                {uploadStatus === "success"
-                  ? <CheckCircle2 size={13} style={{ flexShrink: 0 }} />
-                  : <AlertCircle size={13} style={{ flexShrink: 0 }} />}
+                {uploadStatus === "success" ? <CheckCircle2 size={13} style={{ flexShrink: 0 }} /> : <AlertCircle size={13} style={{ flexShrink: 0 }} />}
                 {uploadMsg}
               </div>
             )}
 
-            {/* Analyzing spinner */}
             {isAnalyzing && (
               <div className="etl-analyzing">
                 <Loader size={13} className="etl-spin" />
@@ -1112,57 +976,39 @@ export default function ETLPage() {
               </div>
             )}
 
-            {/* Show retry button if CSV uploaded but analysis failed */}
             {uploadStatus === "success" && !csvAnalysis && !isAnalyzing && (
               <div className="etl-analyzing" style={{ marginTop: '12px' }}>
                 <AlertCircle size={13} />
                 CSV uploaded but analysis not available. 
-                <button onClick={() => analyzeCSV(true)}>
-                  Retry Analysis
-                </button>
+                <button onClick={() => analyzeCSV(true)}>Retry Analysis</button>
               </div>
             )}
 
-            {/* Year selector */}
             {csvAnalysis && !isAnalyzing && (
               <div className="etl-year-sel">
                 <div className="etl-year-hd">
                   <BarChart3 size={13} />
                   Data Summary &amp; Year Filter
-                  <button
-                    className="etl-year-refresh-btn"
-                    onClick={() => analyzeCSV(true)}
-                  >
+                  <button className="etl-year-refresh-btn" onClick={() => analyzeCSV(true)}>
                     <RefreshCw size={10} /> Refresh
                   </button>
                 </div>
                 <div className="etl-year-stats">
                   <div className="etl-year-stat">
                     <div className="etl-year-stat-lbl">Total Rows</div>
-                    <div className="etl-year-stat-val">
-                      {fmt(csvAnalysis.total_rows_scanned)}
-                    </div>
+                    <div className="etl-year-stat-val">{fmt(csvAnalysis.total_rows_scanned)}</div>
                   </div>
                   <div className="etl-year-stat">
                     <div className="etl-year-stat-lbl">Years Found</div>
-                    <div className="etl-year-stat-val">
-                      {csvAnalysis.available_years?.length ?? 0}
-                    </div>
+                    <div className="etl-year-stat-val">{csvAnalysis.available_years?.length ?? 0}</div>
                   </div>
                 </div>
                 <div className="etl-year-btns">
-                  <button
-                    className={`etl-year-btn ${selectedYear === "all" ? "active" : ""}`}
-                    onClick={() => setSelectedYear("all")}
-                  >
+                  <button className={`etl-year-btn ${selectedYear === "all" ? "active" : ""}`} onClick={() => setSelectedYear("all")}>
                     All ({fmt(csvAnalysis.total_rows_scanned)})
                   </button>
                   {csvAnalysis.available_years?.map((y) => (
-                    <button
-                      key={y}
-                      className={`etl-year-btn ${selectedYear === y ? "active" : ""}`}
-                      onClick={() => setSelectedYear(y)}
-                    >
+                    <button key={y} className={`etl-year-btn ${selectedYear === y ? "active" : ""}`} onClick={() => setSelectedYear(y)}>
                       {y} ({fmt(csvAnalysis.year_counts?.[y])})
                     </button>
                   ))}
@@ -1171,7 +1017,7 @@ export default function ETLPage() {
             )}
           </div>
 
-          {/* ── Pipeline card ── */}
+          {/* Pipeline card */}
           <div className="etl-card">
             <div className="etl-card-title">Step 2 — Run Pipeline</div>
             <div className="etl-card-desc">Execute ETL jobs in sequence</div>
@@ -1185,160 +1031,72 @@ export default function ETLPage() {
                 const isPartial = st === "partial";
                 const isError = st === "error";
                 const result = jobResult[job.id];
-
-                const dmInfo =
-                  job.id === "build-datamart" ? pipelineStatus?.datamart : null;
+                const dmInfo = job.id === "build-datamart" ? pipelineStatus?.datamart : null;
 
                 return (
-                  <div
-                    key={job.id}
-                    className={`etl-job-row ${!unlocked ? "job-locked" : ""} ${
-                      isDone ? "job-done" : ""
-                    } ${isPartial ? "job-partial" : ""} ${isError ? "job-error" : ""}`}
-                  >
+                  <div key={job.id} className={`etl-job-row ${!unlocked ? "job-locked" : ""} ${isDone ? "job-done" : ""} ${isPartial ? "job-partial" : ""} ${isError ? "job-error" : ""}`}>
                     <div className="etl-job-info">
                       <div className="etl-job-name">
-                        {job.icon}
-                        {idx + 1}. {job.label}
-                        {isPartial && (
-                          <span className="etl-job-badge badge-partial">Incomplete</span>
-                        )}
-                        {isError && (
-                          <span className="etl-job-badge badge-error">Failed</span>
-                        )}
+                        {job.icon} {idx + 1}. {job.label}
+                        {isPartial && <span className="etl-job-badge badge-partial">Incomplete</span>}
+                        {isError && <span className="etl-job-badge badge-error">Failed</span>}
                       </div>
                       <div className="etl-job-desc">{job.description}</div>
-
-                      {!unlocked && (
-                        <div className="etl-job-lock">
-                          <Lock size={10} /> {job.lockHint}
-                        </div>
-                      )}
-
-                      {/* Datamart missing-records warning */}
+                      {!unlocked && <div className="etl-job-lock"><Lock size={10} /> {job.lockHint}</div>}
                       {isPartial && dmInfo && dmInfo.missing_records > 0 && (
-                        <div className="etl-job-warning">
-                          ⚠ {fmt(dmInfo.missing_records)} missing records —{" "}
-                          {dmInfo.completion_percentage}% complete
-                        </div>
+                        <div className="etl-job-warning">⚠ {fmt(dmInfo.missing_records)} missing records — {dmInfo.completion_percentage}% complete</div>
                       )}
-
-                      {/* Needs rebuild warning */}
                       {!isDone && !isPartial && dmInfo?.exists && !dmInfo.is_complete && (
-                        <div className="etl-job-warning">
-                          ⚠ Datamart needs rebuild — {fmt(dmInfo.missing_records)} missing
-                        </div>
+                        <div className="etl-job-warning">⚠ Datamart needs rebuild — {fmt(dmInfo.missing_records)} missing</div>
                       )}
-
-                      {/* Error message */}
-                      {isError && result?.message && (
-                        <div className="etl-job-error-msg">✕ {result.message}</div>
-                      )}
-
-                      {/* Success pills */}
+                      {isError && result?.message && <div className="etl-job-error-msg">✕ {result.message}</div>}
                       {(isDone || isPartial) && result && (
                         <div className="etl-job-pills">
-                          {result.rows_inserted != null && (
-                            <span className="etl-pill pill-green">
-                              {fmt(result.rows_inserted)} inserted
-                            </span>
-                          )}
-                          {result.rows_skipped != null && result.rows_skipped > 0 && (
-                            <span className="etl-pill pill-yellow">
-                              {fmt(result.rows_skipped)} skipped
-                            </span>
-                          )}
-                          {result.filter_applied && (
-                            <span className="etl-pill pill-blue">
-                              {result.filter_applied}
-                            </span>
-                          )}
+                          {result.rows_inserted != null && <span className="etl-pill pill-green">{fmt(result.rows_inserted)} inserted</span>}
+                          {result.rows_skipped != null && result.rows_skipped > 0 && <span className="etl-pill pill-yellow">{fmt(result.rows_skipped)} skipped</span>}
+                          {result.filter_applied && <span className="etl-pill pill-blue">{result.filter_applied}</span>}
                         </div>
                       )}
                     </div>
-
                     <div className="etl-job-actions">
                       {statusIcon(st)}
-                      <button
-                        className="etl-run-btn"
-                        disabled={!unlocked || isLoading}
-                        onClick={() => runJob(job)}
-                      >
-                        {isLoading ? (
-                          <><Loader size={11} className="etl-spin" /> Running…</>
-                        ) : isDone || isPartial ? (
-                          <><RefreshCw size={11} /> Re-run</>
-                        ) : (
-                          <><Play size={11} /> Run</>
-                        )}
+                      <button className="etl-run-btn" disabled={!unlocked || isLoading} onClick={() => runJob(job)}>
+                        {isLoading ? <><Loader size={11} className="etl-spin" /> Running…</> : (isDone || isPartial) ? <><RefreshCw size={11} /> Re-run</> : <><Play size={11} /> Run</>}
                       </button>
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            <button className="etl-reset-btn" onClick={resetAllJobs}>
+              <RotateCcw size={13} /> Reset All Jobs
+            </button>
           </div>
         </div>
 
-        {/* History toggle + panel */}
-        <button
-          className="etl-history-toggle"
-          onClick={() => {
-            setShowHistory((v) => {
-              if (!v) fetchJobHistory();
-              return !v;
-            });
-          }}
-        >
-          <History size={14} />
-          Job History
-          <span className="hd-count">{jobHistory.length} runs</span>
-          {showHistory
-            ? <ChevronUp size={13} style={{ marginLeft: 4 }} />
-            : <ChevronDown size={13} style={{ marginLeft: 4 }} />}
+        <button className="etl-history-toggle" onClick={() => { setShowHistory((v) => { if (!v) fetchJobHistory(); return !v; }); }}>
+          <History size={14} /> Job History <span className="hd-count">{jobHistory.length} runs</span>
+          {showHistory ? <ChevronUp size={13} style={{ marginLeft: 4 }} /> : <ChevronDown size={13} style={{ marginLeft: 4 }} />}
         </button>
 
         {showHistory && (
           <div className="etl-history-panel">
             <div className="etl-history-hd">
-              <History size={13} />
-              Recent ETL Runs
-              <button
-                className="etl-history-refresh"
-                onClick={fetchJobHistory}
-                disabled={isLoadingHistory}
-              >
-                {isLoadingHistory
-                  ? <Loader size={12} className="etl-spin" />
-                  : <><RefreshCw size={12} /> Refresh</>}
+              <History size={13} /> Recent ETL Runs
+              <button className="etl-history-refresh" onClick={fetchJobHistory} disabled={isLoadingHistory}>
+                {isLoadingHistory ? <Loader size={12} className="etl-spin" /> : <><RefreshCw size={12} /> Refresh</>}
               </button>
             </div>
-
-            {isLoadingHistory && (
-              <div className="etl-history-empty">
-                <Loader size={16} className="etl-spin" style={{ margin: "0 auto" }} />
-              </div>
-            )}
-
-            {!isLoadingHistory && jobHistory.length === 0 && (
-              <div className="etl-history-empty">No ETL jobs have been run yet.</div>
-            )}
-
+            {isLoadingHistory && <div className="etl-history-empty"><Loader size={16} className="etl-spin" style={{ margin: "0 auto" }} /></div>}
+            {!isLoadingHistory && jobHistory.length === 0 && <div className="etl-history-empty">No ETL jobs have been run yet.</div>}
             {!isLoadingHistory && jobHistory.length > 0 && (
               <div className="etl-history-list">
                 {jobHistory.map((j) => (
                   <div key={j.id} className="etl-history-item">
                     <div className="etl-history-item-hd">
                       <span>{j.name}</span>
-                      <span className={`hist-status ${
-                        j.status === "success"
-                          ? "hist-ok"
-                          : j.status === "cancelled"
-                          ? "hist-cancelled"
-                          : "hist-fail"
-                      }`}>
-                        {j.status}
-                      </span>
+                      <span className={`hist-status ${j.status === "success" ? "hist-ok" : j.status === "cancelled" ? "hist-cancelled" : "hist-fail"}`}>{j.status}</span>
                     </div>
                     <div className="etl-history-metrics">
                       {j.rows_inserted > 0 && <span>📥 {fmt(j.rows_inserted)} inserted</span>}
@@ -1346,12 +1104,8 @@ export default function ETLPage() {
                       {j.rows_skipped > 0 && <span>⏭ {fmt(j.rows_skipped)} skipped</span>}
                       {j.duration_seconds > 0 && <span>⏱ {fmtDuration(j.duration_seconds)}</span>}
                     </div>
-                    <div className="etl-history-date">
-                      {new Date(j.created_at).toLocaleString()}
-                    </div>
-                    {j.error_message && (
-                      <div className="etl-history-err">{j.error_message}</div>
-                    )}
+                    <div className="etl-history-date">{new Date(j.created_at).toLocaleString()}</div>
+                    {j.error_message && <div className="etl-history-err">{j.error_message}</div>}
                   </div>
                 ))}
               </div>
@@ -1376,49 +1130,16 @@ interface PSProps {
 
 function PipelineStatusPanel({ status, checking, resuming, uploadDone, onRefresh, onResume }: PSProps) {
   const steps = [
-    {
-      key: "upload",
-      icon: "📁",
-      name: "CSV Upload",
-      isComplete: status.csv_exists,
-      exists: status.csv_exists,
-      count: 0,
-    },
-    {
-      key: "load-raw",
-      icon: "💾",
-      name: "Load Raw",
-      isComplete: status.raw.is_complete,
-      exists: status.raw.exists,
-      count: status.raw.count,
-    },
-    {
-      key: "build-clean",
-      icon: "🧹",
-      name: "Build Clean",
-      isComplete: status.clean.is_complete,
-      exists: status.clean.exists,
-      count: status.clean.count,
-    },
-    {
-      key: "build-datamart",
-      icon: "⭐",
-      name: "Datamart",
-      isComplete: status.datamart.is_complete,
-      exists: status.datamart.exists,
-      count: status.datamart.count,
-      expectedCount: status.datamart.expected_count,
-      missingRecords: status.datamart.missing_records,
-      completionPct: status.datamart.completion_percentage,
-    },
+    { key: "upload", icon: "📁", name: "CSV Upload", isComplete: status.csv_exists, exists: status.csv_exists, count: 0 },
+    { key: "load-raw", icon: "💾", name: "Load Raw", isComplete: status.raw.is_complete, exists: status.raw.exists, count: status.raw.count },
+    { key: "build-clean", icon: "🧹", name: "Build Clean", isComplete: status.clean.is_complete, exists: status.clean.exists, count: status.clean.count },
+    { key: "build-datamart", icon: "⭐", name: "Datamart", isComplete: status.datamart.is_complete, exists: status.datamart.exists, count: status.datamart.count, expectedCount: status.datamart.expected_count, missingRecords: status.datamart.missing_records, completionPct: status.datamart.completion_percentage },
   ];
 
-  // Show resume button only when there are steps we can actually run right now
-  const needsResume =
-    uploadDone &&
+  const needsResume = uploadDone &&
     ((!status.raw.is_complete && status.csv_exists) ||
-      (!status.clean.is_complete && status.raw.exists) ||
-      (!status.datamart.is_complete && status.clean.exists));
+     (!status.clean.is_complete && status.raw.exists) ||
+     (!status.datamart.is_complete && status.clean.exists));
 
   return (
     <div className="etl-pipeline">
@@ -1427,17 +1148,10 @@ function PipelineStatusPanel({ status, checking, resuming, uploadDone, onRefresh
           <RefreshCw size={13} className={checking ? "etl-spin" : ""} />
           Pipeline Status — incomplete steps
         </div>
-        <button
-          className="etl-pipeline-refresh"
-          onClick={onRefresh}
-          disabled={checking}
-        >
-          {checking
-            ? <Loader size={12} className="etl-spin" />
-            : <><RefreshCw size={12} /> Refresh</>}
+        <button className="etl-pipeline-refresh" onClick={onRefresh} disabled={checking}>
+          {checking ? <Loader size={12} className="etl-spin" /> : <><RefreshCw size={12} /> Refresh</>}
         </button>
       </div>
-
       <div className="etl-pipeline-steps">
         {steps.map((s) => {
           const cls = s.isComplete ? "ps-done" : s.exists ? "ps-partial" : "";
@@ -1445,44 +1159,23 @@ function PipelineStatusPanel({ status, checking, resuming, uploadDone, onRefresh
             <div key={s.key} className={`etl-ps ${cls}`}>
               <div className="etl-ps-icon">{s.icon}</div>
               <div className="etl-ps-name">{s.name}</div>
-              {s.count > 0 && (
-                <div className="etl-ps-count">{s.count.toLocaleString()}</div>
-              )}
-              {s.missingRecords != null && s.missingRecords > 0 && (
-                <div className="etl-ps-warn">
-                  ⚠ {s.missingRecords.toLocaleString()} missing
-                </div>
-              )}
+              {s.count > 0 && <div className="etl-ps-count">{s.count.toLocaleString()}</div>}
+              {s.missingRecords != null && s.missingRecords > 0 && <div className="etl-ps-warn">⚠ {s.missingRecords.toLocaleString()} missing</div>}
               {s.completionPct != null && s.completionPct < 100 && s.completionPct > 0 && (
                 <div className="etl-ps-prog">
                   <div className="etl-ps-bar" style={{ width: `${s.completionPct}%` }} />
                   <span className="etl-ps-pct">{s.completionPct}%</span>
                 </div>
               )}
-              {s.isComplete
-                ? <CheckCircle2 size={13} color="#4ade80" />
-                : s.exists
-                ? <AlertCircle size={13} color="#fbbf24" />
-                : <span style={{ fontSize: 13, opacity: .4 }}>○</span>}
+              {s.isComplete ? <CheckCircle2 size={13} color="#4ade80" /> : s.exists ? <AlertCircle size={13} color="#fbbf24" /> : <span style={{ fontSize: 13, opacity: .4 }}>○</span>}
             </div>
           );
         })}
       </div>
-
       {needsResume && (
         <button className="etl-resume-btn" onClick={onResume} disabled={resuming}>
-          {resuming
-            ? <><Loader size={13} className="etl-spin" /> Resuming pipeline…</>
-            : <><PlayCircle size={13} /> Resume Pipeline — fix incomplete steps</>}
+          {resuming ? <><Loader size={13} className="etl-spin" /> Resuming pipeline…</> : <><PlayCircle size={13} /> Resume Pipeline — fix incomplete steps</>}
         </button>
-      )}
-
-      {status.datamart.missing_records > 0 && (
-        <div className="etl-pipeline-warn">
-          <AlertCircle size={13} color="#fbbf24" />
-          Datamart is missing {status.datamart.missing_records.toLocaleString()} records.
-          {uploadDone && " Click 'Resume Pipeline' to fix."}
-        </div>
       )}
     </div>
   );

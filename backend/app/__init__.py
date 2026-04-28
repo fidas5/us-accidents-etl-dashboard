@@ -57,7 +57,7 @@ def create_app():
 
     app.register_blueprint(datamart_bp, url_prefix="/etl")
 
-    # ── 5. Health check ────────────────────────────────────────────────────
+    # ── 5. Health check ─────────────────────────────────3- no its first time to integrate but already exists in my local pc i used it in another project ───────────────────
     @app.route("/health")
     def health():
         try:

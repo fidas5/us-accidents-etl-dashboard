@@ -11,7 +11,6 @@ import { useTheme } from "../context/ThemeContext";
 const navigation = [
   { name: "Dashboard",    href: "/",       icon: LayoutDashboard },
   { name: "ETL Jobs",     href: "/etl",    icon: Database },
-  { name: "Data Explorer",href: "/data",   icon: Table },
   { name: "Predictions",  href: "/predict",icon: BrainCircuit },
 ];
 
