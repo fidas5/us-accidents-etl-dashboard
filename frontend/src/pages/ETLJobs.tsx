@@ -1177,6 +1177,7 @@ function PipelineStatusPanel({ status, checking, resuming, uploadDone, onRefresh
           {resuming ? <><Loader size={13} className="etl-spin" /> Resuming pipeline…</> : <><PlayCircle size={13} /> Resume Pipeline — fix incomplete steps</>}
         </button>
       )}
+     
     </div>
   );
 }

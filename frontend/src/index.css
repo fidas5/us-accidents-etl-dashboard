@@ -961,3 +961,13 @@ body {
   .kpi-grid     { grid-template-columns: 1fr; }
   .ds-kpi-strip { grid-template-columns: 1fr; }
 }
+
+@keyframes etl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.etl-spin {
+  animation: etl-spin 1s linear infinite;
+}

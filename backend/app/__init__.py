@@ -50,12 +50,12 @@ def create_app():
     from .routes.etl import etl_bp
     from .routes.stats import stats_bp
     from .routes.datamart import datamart_bp 
-
+    from .routes.ai import ai_bp   
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(etl_bp, url_prefix="/etl")
     app.register_blueprint(stats_bp, url_prefix="/api/stats")
-
     app.register_blueprint(datamart_bp, url_prefix="/etl")
+    app.register_blueprint(ai_bp, url_prefix="/ai")
 
     # ── 5. Health check ─────────────────────────────────3- no its first time to integrate but already exists in my local pc i used it in another project ───────────────────
     @app.route("/health")
