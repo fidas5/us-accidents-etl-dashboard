@@ -1,109 +1,103 @@
-
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Model Training Report</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
-                h1 { color: #333; }
-                .metric { display: inline-block; margin: 20px; padding: 15px; background: #f0f0f0; border-radius: 8px; }
-                .metric-value { font-size: 28px; font-weight: bold; color: #667eea; }
-                .metric-label { font-size: 12px; color: #666; }
-                img { max-width: 100%; margin: 20px 0; border: 1px solid #ddd; border-radius: 8px; }
-                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-                th { background: #f0f0f0; }
-                .severity-1 { color: #60a5fa; }
-                .severity-2 { color: #fbbf24; }
-                .severity-3 { color: #fb923c; }
-                .severity-4 { color: #f87171; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>📊 Random Forest Model Training Report</h1>
-                <p>Training completed on 2026-05-02 02:13:52</p>
-                
-                <div class="metric">
-                    <div class="metric-value">65.0%</div>
-                    <div class="metric-label">Accuracy</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">68.7%</div>
-                    <div class="metric-label">CV Score (5-fold)</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-value">407,391</div>
-                    <div class="metric-label">Test Samples</div>
-                </div>
-                
-                <h2>📈 Performance by Class</h2>
-                <img src="performance_chart.png" alt="Performance Chart">
-                
-                <h2>⭐ Feature Importance</h2>
-                <img src="feature_importance.png" alt="Feature Importance">
-                
-                <h2>📊 Confusion Matrix</h2>
-                <img src="confusion_matrix.png" alt="Confusion Matrix">
-                
-                <h2>📋 Classification Report</h2>
-                <table>
-                    <tr>
-                        <th>Severity</th>
-                        <th>Precision</th>
-                        <th>Recall</th>
-                        <th>F1-Score</th>
-                        <th>Support</th>
-                    </tr>
-        
-                    <tr>
-                        <td class="severity-1"><strong>Severity 1</strong></td>
-                        <td>0.140</td>
-                        <td>0.769</td>
-                        <td>0.237</td>
-                        <td>7,345</td>
-                    </tr>
-                
-                    <tr>
-                        <td class="severity-2"><strong>Severity 2</strong></td>
-                        <td>0.849</td>
-                        <td>0.719</td>
-                        <td>0.779</td>
-                        <td>320,909</td>
-                    </tr>
-                
-                    <tr>
-                        <td class="severity-3"><strong>Severity 3</strong></td>
-                        <td>0.321</td>
-                        <td>0.386</td>
-                        <td>0.351</td>
-                        <td>68,242</td>
-                    </tr>
-                
-                    <tr>
-                        <td class="severity-4"><strong>Severity 4</strong></td>
-                        <td>0.141</td>
-                        <td>0.170</td>
-                        <td>0.154</td>
-                        <td>10,895</td>
-                    </tr>
-                
-                </table>
-                
-                <h2>⭐ Top 5 Features</h2>
-                <ol>
-        <li><strong>temperature_c</strong>: 0.1956 (19.6%)</li>
-<li><strong>state</strong>: 0.1822 (18.2%)</li>
-<li><strong>hour</strong>: 0.1716 (17.2%)</li>
-<li><strong>month</strong>: 0.1126 (11.3%)</li>
-<li><strong>weather_condition</strong>: 0.1104 (11.0%)</li>
-
-                </ol>
-                
-                <hr>
-                <p style="color: #666; font-size: 12px;">Model: Random Forest | Class Weight: Balanced | Features: 10</p>
-            </div>
-        </body>
-        </html>
-        
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>Model Report</title>
+<style>
+  body  { font-family:'Segoe UI',Arial,sans-serif; margin:40px;
+           background:#f0f2f5; color:#222; }
+  .card { background:white; border-radius:12px; padding:28px;
+           margin-bottom:28px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  h1    { color:#1e293b; margin:0 0 6px; }
+  h2    { color:#334155; border-left:4px solid #667eea;
+           padding-left:10px; margin-top:0; }
+  .kpis { display:flex; gap:20px; flex-wrap:wrap; margin:20px 0; }
+  .kpi  { background:#f8fafc; border-radius:10px; padding:18px 26px;
+           min-width:130px; text-align:center; border:1px solid #e2e8f0; }
+  .kv   { font-size:2rem; font-weight:700; color:#667eea; }
+  .kl   { font-size:.78rem; color:#64748b; margin-top:4px; }
+  table { width:100%; border-collapse:collapse; font-size:.92rem; }
+  th,td { padding:10px 14px; text-align:left;
+           border-bottom:1px solid #e2e8f0; }
+  th    { background:#f1f5f9; font-weight:600; }
+  img   { max-width:100%; border-radius:8px;
+           border:1px solid #e2e8f0; margin-top:12px; }
+  .note { font-size:.8rem; color:#94a3b8; }
+  .badge { display:inline-block; color:white; padding:3px 10px;
+            border-radius:12px; font-size:.8rem; margin:4px; }
+</style></head><body>
+<div class="card">
+  <h1>📊 RF + Road Features + Joint Threshold Calibration</h1>
+  <p class="note">Generated: 2026-05-02 19:46:58
+     &nbsp;|&nbsp; 2,036,952 records</p>
+  <p>
+    <span class="badge" style="background:#f97316">13 road features</span>
+    <span class="badge" style="background:#667eea">Joint threshold tuning</span>
+    <span class="badge" style="background:#10b981">balanced_subsample</span>
+  </p>
+  <div class="kpis">
+    <div class="kpi"><div class="kv">70.2%</div>
+      <div class="kl">Accuracy</div></div>
+    <div class="kpi"><div class="kv">56.1%</div>
+      <div class="kl">Balanced Accuracy</div></div>
+    <div class="kpi"><div class="kv">57.9%</div>
+      <div class="kl">CV BalAcc (±0.6%)</div></div>
+    <div class="kpi"><div class="kv">46.0%</div>
+      <div class="kl">Macro F1</div></div>
+    <div class="kpi"><div class="kv">72.8%</div>
+      <div class="kl">Weighted F1</div></div>
+    <div class="kpi"><div class="kv">305,543</div>
+      <div class="kl">Test Samples</div></div>
+  </div>
+</div>
+<div class="card"><h2>📊 Class Distribution</h2>
+  <img src="class_distribution.png"></div>
+<div class="card"><h2>📈 Per-class Performance</h2>
+  <img src="performance_chart.png">
+  <table style="margin-top:18px">
+    <tr><th>Severity</th><th>Precision</th><th>Recall</th>
+        <th>F1-Score</th><th>Support</th></tr>
+            <tr>
+              <td><strong style="color:#60a5fa">
+                Severity 1 — Low</strong></td>
+              <td>0.217</td><td>0.680</td>
+              <td>0.329</td><td>5,509</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fbbf24">
+                Severity 2 — Moderate</strong></td>
+              <td>0.898</td><td>0.730</td>
+              <td>0.806</td><td>240,681</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#fb923c">
+                Severity 3 — High</strong></td>
+              <td>0.385</td><td>0.657</td>
+              <td>0.485</td><td>51,182</td>
+            </tr>
+            <tr>
+              <td><strong style="color:#f87171">
+                Severity 4 — Critical</strong></td>
+              <td>0.288</td><td>0.177</td>
+              <td>0.219</td><td>8,171</td>
+            </tr>
+  </table></div>
+<div class="card"><h2>🎯 Confusion Matrix</h2>
+  <img src="confusion_matrix.png"></div>
+<div class="card"><h2>⚙️ Calibrated Thresholds</h2>
+  <img src="threshold_chart.png">
+  <table style="margin-top:14px; max-width:400px">
+    <tr><th>Class</th><th>Threshold</th></tr><tr><td>Severity 1 (Low)</td><td>0.327</td></tr><tr><td>Severity 3 (High)</td><td>0.491</td></tr><tr><td>Severity 4 (Critical)</td><td>0.327</td></tr><tr><td>Severity 2 (Moderate)</td><td>fallback</td></tr>
+  </table>
+  <p class="note" style="margin-top:10px">
+    Severity 2 has no threshold — it is always the fallback prediction
+    when no other class threshold fires. This prevents it from collapsing
+    all predictions to the majority class.
+  </p></div>
+<div class="card"><h2>⭐ Feature Importance</h2>
+  <img src="feature_importance.png">
+  <h3 style="margin-top:18px">Top 5</h3><ol><li><strong>duration_minutes</strong>: 0.2004 (20.0%)</li><li><strong>month_cos</strong>: 0.0654 (6.5%)</li><li><strong>roundabout</strong>: 0.0505 (5.1%)</li><li><strong>bump</strong>: 0.0460 (4.6%)</li><li><strong>traffic_calming</strong>: 0.0453 (4.5%)</li></ol></div>
+<div class="card note">
+  RF n=300, depth=18, balanced_subsample &nbsp;|&nbsp;
+  35 features (10 numeric + 4 categorical + 21 boolean/road) &nbsp;|&nbsp;
+  Joint threshold: scale grid on macro-F1
+</div>
+</body></html>

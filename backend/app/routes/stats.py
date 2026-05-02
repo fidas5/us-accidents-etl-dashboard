@@ -1,3 +1,4 @@
+
 """
 stats.py — Dashboard KPI endpoints
 ====================================
@@ -669,7 +670,7 @@ def by_hour():
                 "day_of_week": r.day_of_week,
                 "day_name":    r.day_name,
                 "count":       r.count,
-                "intensity":   round(r.count / max_count * 100, 1),
+                "intensity":   _safe_round(r.count / max_count * 100, 1),
             }
             for r in rows
         ]
@@ -796,7 +797,7 @@ def by_env_bucket():
                 {
                     "bucket":       r.temp_bucket,
                     "count":        r.count,
-                    "pct":          round(r.count / temp_total * 100, 1),
+                    "pct":          _safe_round(r.count / temp_total * 100, 1),
                     "avg_severity": _safe_round(r.avg_severity, 2),
                 }
                 for r in temp_rows
@@ -809,7 +810,7 @@ def by_env_bucket():
                 {
                     "bucket":       r.visibility_bucket,
                     "count":        r.count,
-                    "pct":          round(r.count / vis_total * 100, 1),
+                    "pct":          _safe_round(r.count / vis_total * 100, 1),
                     "avg_severity": _safe_round(r.avg_severity, 2),
                 }
                 for r in vis_rows
@@ -879,3 +880,493 @@ def filter_options():
         return _handle_missing_tables(exc)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+#  NEW KPIs (MUST HAVE)
+# ─────────────────────────────────────────────────────────────
+
+@stats_bp.route("/avg-duration", methods=["GET"])
+@jwt_required()
+def avg_duration():
+    """
+    MUST HAVE — Average Duration.
+
+    Returns:
+      avg_duration_min   — AVG(duration_min) with active filters
+    """
+    try:
+        query = _base_query()
+        query = _apply_filters_to_query(query)
+        agg_row = query.with_entities(
+            func.avg(FactAccident.duration_min).label("avg_duration"),
+        ).one_or_none()
+
+        return jsonify({
+            "avg_duration_min": _safe_round(agg_row.avg_duration if agg_row else None, 1),
+        }), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@stats_bp.route("/high-severity-rate", methods=["GET"])
+@jwt_required()
+def high_severity_rate():
+    """
+    MUST HAVE — High Severity Rate.
+
+    Formula:
+      (COUNT(fact_id) WHERE severity >= 3) / COUNT(fact_id) * 100
+    Returns:
+      high_severity_rate — Percentage of accidents with high severity (3 or 4)
+    """
+    try:
+        base_query = _base_query()
+        filtered_query = _apply_filters_to_query(base_query)
+
+        total_accidents = filtered_query.count()
+        high_severity_accidents = filtered_query.filter(FactAccident.severity >= 3).count()
+
+        high_severity_rate = _safe_round((high_severity_accidents / total_accidents * 100) if total_accidents > 0 else 0, 2)
+
+        return jsonify({
+            "high_severity_rate": high_severity_rate,
+        }), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@stats_bp.route("/severity-by-road-feature", methods=["GET"])
+@jwt_required()
+def severity_by_road_feature():
+    """
+    MUST HAVE — Severity by Road Feature.
+
+    Formula:
+      For each road feature (amenity, bump, crossing, etc.):
+      COUNT(fact_id) WHERE feature = True
+      AVG(severity) WHERE feature = True
+    Returns: [{road_feature, count, avg_severity}] ordered by count desc
+    """
+    try:
+        # List of road feature columns in DimRoad
+        road_features = [
+            'amenity', 'bump', 'crossing', 'give_way', 'junction', 
+            'no_exit', 'railway', 'roundabout', 'station', 'stop', 
+            'traffic_calming', 'traffic_signal', 'turning_loop'
+        ]
+        
+        results = []
+        
+        # Apply filters once for all queries
+        years = _parse_ints("year")
+        severities = _parse_ints("severity")
+        states = _parse_strings("state")
+        months = _parse_ints("month")
+        
+        for feature in road_features:
+            # Build query for this specific road feature
+            query = db.session.query(
+                func.count().label("count"),
+                func.avg(FactAccident.severity).label("avg_severity"),
+            ).select_from(FactAccident)\
+             .join(DimRoad, FactAccident.road_id == DimRoad.road_id)\
+             .join(DimTime, FactAccident.time_id == DimTime.time_id)\
+             .join(DimLocation, FactAccident.location_id == DimLocation.location_id)\
+             .join(DimWeather, FactAccident.weather_id == DimWeather.weather_id, isouter=True)\
+             .filter(getattr(DimRoad, feature) == True)  # Only accidents where this feature is present
+            
+            # Apply filters
+            if years:
+                query = query.filter(DimTime.year.in_(years))
+            if severities:
+                query = query.filter(FactAccident.severity.in_(severities))
+            if states:
+                query = query.filter(DimLocation.state.in_(states))
+            if months:
+                query = query.filter(DimTime.month.in_(months))
+            
+            row = query.one_or_none()
+            
+            if row and row.count > 0:
+                results.append({
+                    "road_feature": feature.replace('_', ' ').title(),  # Format nicely
+                    "count": row.count,
+                    "avg_severity": _safe_round(row.avg_severity, 2),
+                })
+        
+        # Sort by count descending
+        results.sort(key=lambda x: x["count"], reverse=True)
+        
+        return jsonify({"data": results}), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+@stats_bp.route("/risk-multiplier", methods=["GET"])
+@jwt_required()
+def risk_multiplier():
+    """
+    MUST HAVE — Risk Multiplier.
+
+    This is a placeholder. A more complex calculation involving multiple factors
+    (e.g., road features, weather, time of day) would be implemented here.
+    For now, it returns a dummy value or a simple aggregation.
+    Returns:
+      risk_multiplier — A calculated risk multiplier.
+    """
+    try:
+        # Placeholder for a more complex risk multiplier calculation.
+        # For demonstration, let's return the average severity as a simple risk indicator.
+        query = _base_query()
+        query = _apply_filters_to_query(query)
+        agg_row = query.with_entities(
+            func.avg(FactAccident.severity).label("avg_severity"),
+        ).one_or_none()
+
+        risk_val = _safe_round(agg_row.avg_severity if agg_row else None, 2)
+        # A more sophisticated calculation would involve weighting different factors.
+        # For example: risk_multiplier = avg_severity * weather_factor * road_factor
+
+        return jsonify({
+            "risk_multiplier": risk_val,
+            "note": "This is a simplified risk multiplier based on average severity. A more complex model would integrate multiple factors."
+        }), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@stats_bp.route("/rush-hour-severity-index", methods=["GET"])
+@jwt_required()
+def rush_hour_severity_index():
+    """
+    MUST HAVE — Rush Hour Severity Index.
+
+    Formula:
+      AVG(severity) for accidents occurring during defined rush hours (e.g., 6-9 AM and 4-7 PM on weekdays).
+    Returns:
+      rush_hour_severity_index — Average severity during rush hours.
+    """
+    try:
+        # Define rush hour periods (e.g., 6-9 AM and 4-7 PM on weekdays)
+        # Weekdays are 0-4 (Monday-Friday) if Sunday is 6
+        # Assuming DimTime.day_of_week is 0=Monday, 6=Sunday based on DAY_ORDER
+        # Let's assume 0=Monday to 4=Friday for weekdays
+        RUSH_HOUR_MORNING_START = 6
+        RUSH_HOUR_MORNING_END   = 9
+        RUSH_HOUR_EVENING_START = 16
+        RUSH_HOUR_EVENING_END   = 19
+
+        query = _base_query()
+        query = _apply_filters_to_query(query)
+
+        # Filter for weekdays (Monday=0 to Friday=4) and rush hour times
+        query = query.filter(
+            DimTime.day_of_week.in_([0, 1, 2, 3, 4]),
+            (
+                (DimTime.hour >= RUSH_HOUR_MORNING_START) & (DimTime.hour < RUSH_HOUR_MORNING_END) |
+                (DimTime.hour >= RUSH_HOUR_EVENING_START) & (DimTime.hour < RUSH_HOUR_EVENING_END)
+            )
+        )
+
+        agg_row = query.with_entities(
+            func.avg(FactAccident.severity).label("avg_severity"),
+        ).one_or_none()
+
+        rush_hour_index = _safe_round(agg_row.avg_severity if agg_row else None, 2)
+
+        return jsonify({
+            "rush_hour_severity_index": rush_hour_index,
+        }), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@stats_bp.route("/weather-severity-score", methods=["GET"])
+@jwt_required()
+def weather_severity_score():
+    """
+    MUST HAVE — Weather Severity Score.
+
+    Formula:
+      AVG(severity) grouped by weather conditions, potentially weighted.
+      For simplicity, we'll return average severity for each weather condition.
+    Returns: [{weather_condition, avg_severity}] ordered by avg_severity desc
+    """
+    try:
+        query = db.session.query(
+            DimWeather.weather_condition,
+            func.avg(FactAccident.severity).label("avg_severity"),
+            func.count().label("count"), # Include count to ensure enough data points
+        ).select_from(FactAccident)\
+         .join(DimWeather, FactAccident.weather_id == DimWeather.weather_id)\
+         .join(DimTime, FactAccident.time_id == DimTime.time_id, isouter=True)\
+         .join(DimLocation, FactAccident.location_id == DimLocation.location_id, isouter=True)\
+         .join(DimRoad, FactAccident.road_id == DimRoad.road_id, isouter=True)\
+         .filter(DimWeather.weather_condition.isnot(None))
+
+        # Apply filters manually
+        years = _parse_ints("year")
+        if years:
+            query = query.filter(DimTime.year.in_(years))
+        
+        severities = _parse_ints("severity")
+        if severities:
+            query = query.filter(FactAccident.severity.in_(severities))
+        
+        states = _parse_strings("state")
+        if states:
+            query = query.filter(DimLocation.state.in_(states))
+        
+        months = _parse_ints("month")
+        if months:
+            query = query.filter(DimTime.month.in_(months))
+
+        rows = query.group_by(DimWeather.weather_condition)\
+        .having(func.count() > 5)\
+        .order_by(func.avg(FactAccident.severity).desc())\
+        .all()
+
+        data = [
+            {
+                "weather_condition": r.weather_condition,
+                "avg_severity":      _safe_round(r.avg_severity, 2),
+            }
+            for r in rows
+        ]
+        return jsonify({"data": data}), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+#  NEW KPIs (IMPORTANT)
+# ─────────────────────────────────────────────────────────────
+
+@stats_bp.route("/duration-by-severity", methods=["GET"])
+@jwt_required()
+def duration_by_severity():
+    """
+    IMPORTANT — Duration by Severity.
+
+    Formula:
+      AVG(duration_min) GROUP BY severity
+    Returns: [{severity, label, avg_duration_min}] ordered 1→4
+    """
+    try:
+        query = _base_query()
+        query = _apply_filters_to_query(query)
+        rows = query.with_entities(
+            FactAccident.severity,
+            FactAccident.severity_label,
+            func.avg(FactAccident.duration_min).label("avg_duration"),
+        ).filter(FactAccident.duration_min.isnot(None))\
+         .group_by(FactAccident.severity, FactAccident.severity_label)\
+         .order_by(FactAccident.severity)\
+         .all()
+
+        data = [
+            {
+                "severity":         r.severity,
+                "label":            r.severity_label or SEVERITY_LABELS.get(r.severity, str(r.severity)),
+                "avg_duration_min": _safe_round(r.avg_duration, 1),
+            }
+            for r in rows
+        ]
+        return jsonify({"data": data}), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@stats_bp.route("/road-complexity-index", methods=["GET"])
+@jwt_required()
+def road_complexity_index():
+    """
+    IMPORTANT — Road Complexity Index.
+
+    This is a placeholder. A more complex calculation involving road features,
+    number of lanes, speed limits, etc., would be implemented here.
+    For now, it returns a dummy value or a simple aggregation based on road features.
+    Returns:
+      road_complexity_index — A calculated road complexity index.
+    """
+    try:
+        # Placeholder for a more complex road complexity calculation.
+        # For demonstration, let's return the average severity as a simple indicator.
+        query = _base_query()
+        query = _apply_filters_to_query(query)
+        agg_row = query.with_entities(
+            func.avg(FactAccident.severity).label("avg_severity"),
+        ).one_or_none()
+
+        complexity_val = _safe_round(agg_row.avg_severity if agg_row else None, 2)
+        # A more sophisticated calculation could involve weighting different road attributes.
+
+        return jsonify({
+            "road_complexity_index": complexity_val,
+            "note": "This is a simplified road complexity index based on average severity. A more complex model would integrate various road attributes."
+        }), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@stats_bp.route("/night-risk-multiplier", methods=["GET"])
+@jwt_required()
+def night_risk_multiplier():
+    """
+    IMPORTANT — Night Risk Multiplier.
+
+    Formula:
+      A multiplier indicating increased risk during night hours (e.g., 8 PM to 5 AM).
+      For simplicity, we'll compare average severity during night vs. day.
+    Returns:
+      night_risk_multiplier — A multiplier representing night-time risk.
+    """
+    try:
+        NIGHT_START_HOUR = 20 # 8 PM
+        NIGHT_END_HOUR   = 5  # 5 AM
+
+        base_query = _base_query()
+        filtered_query = _apply_filters_to_query(base_query)
+
+        # Average severity during night hours
+        night_query = filtered_query.filter(
+            (DimTime.hour >= NIGHT_START_HOUR) | (DimTime.hour < NIGHT_END_HOUR)
+        )
+        night_agg = night_query.with_entities(func.avg(FactAccident.severity).label("avg_severity")).one_or_none()
+        avg_severity_night = night_agg.avg_severity if night_agg else None
+
+        # Average severity during day hours
+        day_query = filtered_query.filter(
+            (DimTime.hour >= NIGHT_END_HOUR) & (DimTime.hour < NIGHT_START_HOUR)
+        )
+        day_agg = day_query.with_entities(func.avg(FactAccident.severity).label("avg_severity")).one_or_none()
+        avg_severity_day = day_agg.avg_severity if day_agg else None
+
+        night_risk_multiplier = 1.0
+        if avg_severity_day and avg_severity_night and avg_severity_day > 0:
+            night_risk_multiplier = _safe_round(avg_severity_night / avg_severity_day, 2)
+        elif avg_severity_night and not avg_severity_day:
+            night_risk_multiplier = _safe_round(avg_severity_night, 2) # If no day data, just return night severity
+
+        return jsonify({
+            "night_risk_multiplier": night_risk_multiplier,
+            "note": "This multiplier compares average severity during night hours (8 PM - 5 AM) to day hours. A value > 1 indicates higher night risk."
+        }), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@stats_bp.route("/visibility-risk", methods=["GET"])
+@jwt_required()
+def visibility_risk():
+    """
+    IMPORTANT — Visibility Risk.
+
+    Formula:
+      AVG(severity) grouped by visibility buckets, potentially weighted.
+      For simplicity, we'll return average severity for each visibility bucket.
+    Returns: [{visibility_bucket, avg_severity}] ordered by avg_severity desc
+    """
+    try:
+        query = db.session.query(
+            DimWeather.visibility_bucket,
+            func.avg(FactAccident.severity).label("avg_severity"),
+            func.count().label("count"), # Include count to ensure enough data points
+        ).select_from(FactAccident)\
+         .join(DimWeather, FactAccident.weather_id == DimWeather.weather_id)\
+         .join(DimTime, FactAccident.time_id == DimTime.time_id, isouter=True)\
+         .join(DimLocation, FactAccident.location_id == DimLocation.location_id, isouter=True)\
+         .join(DimRoad, FactAccident.road_id == DimRoad.road_id, isouter=True)\
+         .filter(DimWeather.visibility_bucket.isnot(None))\
+         .filter(DimWeather.visibility_bucket != "Unknown")
+
+        # Apply filters manually
+        years = _parse_ints("year")
+        if years:
+            query = query.filter(DimTime.year.in_(years))
+        
+        severities = _parse_ints("severity")
+        if severities:
+            query = query.filter(FactAccident.severity.in_(severities))
+        
+        states = _parse_strings("state")
+        if states:
+            query = query.filter(DimLocation.state.in_(states))
+        
+        months = _parse_ints("month")
+        if months:
+            query = query.filter(DimTime.month.in_(months))
+
+        rows = query.group_by(DimWeather.visibility_bucket)\
+                    .having(func.count() > 5)\
+                    .order_by(func.avg(FactAccident.severity).desc())\
+                    .all()
+
+        data = [
+            {
+                "visibility_bucket": r.visibility_bucket,
+                "avg_severity":      _safe_round(r.avg_severity, 2),
+            }
+            for r in rows
+        ]
+        return jsonify({"data": data}), 200
+
+    except ProgrammingError as exc:
+        return _handle_missing_tables(exc)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ─────────────────────────────────────────────────────────────
+#  BONUS KPIs (for jury / advanced) - Future Enhancements
+# ─────────────────────────────────────────────────────────────
+
+@stats_bp.route("/predicted-severity-score", methods=["GET"])
+@jwt_required()
+def predicted_severity_score():
+    """
+    BONUS — Predicted Severity Score.
+
+    This API would require a machine learning model to predict severity based on various factors.
+    This is a placeholder for future enhancement.
+    """
+    return jsonify({"message": "Predicted Severity Score API is a future enhancement and not yet implemented."}), 200
+
+
+@stats_bp.route("/global-risk-score", methods=["GET"])
+@jwt_required()
+def global_risk_score():
+    """
+    BONUS — Global Risk Score.
+
+    This API would involve a complex aggregation of multiple risk factors across different dimensions.
+    This is a placeholder for future enhancement.
+    """
+    return jsonify({"message": "Global Risk Score API is a future enhancement and not yet implemented."}), 200
