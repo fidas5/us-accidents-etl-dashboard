@@ -1,0 +1,109 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Model Training Report</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+                .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+                h1 { color: #333; }
+                .metric { display: inline-block; margin: 20px; padding: 15px; background: #f0f0f0; border-radius: 8px; }
+                .metric-value { font-size: 28px; font-weight: bold; color: #667eea; }
+                .metric-label { font-size: 12px; color: #666; }
+                img { max-width: 100%; margin: 20px 0; border: 1px solid #ddd; border-radius: 8px; }
+                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+                th { background: #f0f0f0; }
+                .severity-1 { color: #60a5fa; }
+                .severity-2 { color: #fbbf24; }
+                .severity-3 { color: #fb923c; }
+                .severity-4 { color: #f87171; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>📊 Random Forest Model Training Report</h1>
+                <p>Training completed on 2026-05-02 02:13:52</p>
+                
+                <div class="metric">
+                    <div class="metric-value">65.0%</div>
+                    <div class="metric-label">Accuracy</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">68.7%</div>
+                    <div class="metric-label">CV Score (5-fold)</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value">407,391</div>
+                    <div class="metric-label">Test Samples</div>
+                </div>
+                
+                <h2>📈 Performance by Class</h2>
+                <img src="performance_chart.png" alt="Performance Chart">
+                
+                <h2>⭐ Feature Importance</h2>
+                <img src="feature_importance.png" alt="Feature Importance">
+                
+                <h2>📊 Confusion Matrix</h2>
+                <img src="confusion_matrix.png" alt="Confusion Matrix">
+                
+                <h2>📋 Classification Report</h2>
+                <table>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Precision</th>
+                        <th>Recall</th>
+                        <th>F1-Score</th>
+                        <th>Support</th>
+                    </tr>
+        
+                    <tr>
+                        <td class="severity-1"><strong>Severity 1</strong></td>
+                        <td>0.140</td>
+                        <td>0.769</td>
+                        <td>0.237</td>
+                        <td>7,345</td>
+                    </tr>
+                
+                    <tr>
+                        <td class="severity-2"><strong>Severity 2</strong></td>
+                        <td>0.849</td>
+                        <td>0.719</td>
+                        <td>0.779</td>
+                        <td>320,909</td>
+                    </tr>
+                
+                    <tr>
+                        <td class="severity-3"><strong>Severity 3</strong></td>
+                        <td>0.321</td>
+                        <td>0.386</td>
+                        <td>0.351</td>
+                        <td>68,242</td>
+                    </tr>
+                
+                    <tr>
+                        <td class="severity-4"><strong>Severity 4</strong></td>
+                        <td>0.141</td>
+                        <td>0.170</td>
+                        <td>0.154</td>
+                        <td>10,895</td>
+                    </tr>
+                
+                </table>
+                
+                <h2>⭐ Top 5 Features</h2>
+                <ol>
+        <li><strong>temperature_c</strong>: 0.1956 (19.6%)</li>
+<li><strong>state</strong>: 0.1822 (18.2%)</li>
+<li><strong>hour</strong>: 0.1716 (17.2%)</li>
+<li><strong>month</strong>: 0.1126 (11.3%)</li>
+<li><strong>weather_condition</strong>: 0.1104 (11.0%)</li>
+
+                </ol>
+                
+                <hr>
+                <p style="color: #666; font-size: 12px;">Model: Random Forest | Class Weight: Balanced | Features: 10</p>
+            </div>
+        </body>
+        </html>
+        

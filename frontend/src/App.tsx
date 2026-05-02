@@ -15,6 +15,7 @@ import DashboardPage from "./pages/Dashboard";
 import DataExplorerPage from "./pages/DataExplorer";
 import ETLPage from "./pages/ETLJobs";
 import PredictPage from "./pages/Predictions";
+import PredictInfosPage from "./components/ModelInfo";
 
 
 
@@ -79,6 +80,7 @@ function AppRoutes() {
         <Route path="data" element={<DataExplorerPage />} />
         <Route path="etl" element={<ETLPage />} />
         <Route path="predict" element={<PredictPage />} />
+        <Route path="predict-infos" element={<PredictInfosPage />} />
       </Route>
     </Routes>
   );

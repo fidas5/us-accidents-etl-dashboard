@@ -7,7 +7,7 @@ class Config:
      # URI de connexion DB 
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URL",
-        "postgresql://postgres:fida@localhost:5000/us_accidents_db"
+        "postgresql://postgres:fida@localhost:5432/us_accidents_db"
     )
     # FIX: Use a consistent strong secret key
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
@@ -15,8 +15,7 @@ class Config:
     JWT_TOKEN_LOCATION = ["headers"]
     JWT_HEADER_NAME = "Authorization"
     JWT_HEADER_TYPE = "Bearer"
-    
- # Email
+    # Email
     MAIL_SERVER = os.getenv("MAIL_SERVER")
     MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
     MAIL_USERNAME = os.getenv("MAIL_USERNAME")
