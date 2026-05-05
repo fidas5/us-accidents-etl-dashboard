@@ -29,10 +29,10 @@ export const VisibilityRisk: React.FC<VisibilityRiskProps> = ({ data, t }) => {
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>
-          Visibility risk
+          Risque de visibilité
         </span>
         <span style={{ fontSize: 10, padding: "3px 9px", borderRadius: 5, background: t.inputBg, border: `1px solid ${t.border}`, color: t.textMuted }}>
-          Weather impact
+          impact météorologique
         </span>
       </div>
 
@@ -66,8 +66,8 @@ export const VisibilityRisk: React.FC<VisibilityRiskProps> = ({ data, t }) => {
           fontFamily: "monospace"
         }}>
           {data.find(d => d.visibility_bucket === "Poor")?.avg_severity <= 2.2 
-            ? "✓ Poor visibility does not increase severity - excellent adaptation"
-            : "⚠ Poor visibility increases severity - install warning systems"}
+            ? "✓ Une faible visibilité n’augmente pas la gravité"
+            : "⚠ Une faible visibilité augmente la gravité - installer des systèmes d'alerte"}
         </div>
       )}
     </div>

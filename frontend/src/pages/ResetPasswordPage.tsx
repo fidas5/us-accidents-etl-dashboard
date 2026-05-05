@@ -1,41 +1,62 @@
-// src/pages/LoginPage.tsx
-import React, { useState } from "react";
-import { Mail, Lock, ArrowRight, AlertCircle, Layers } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+// src/pages/ResetPasswordPage.tsx
+import React, { useState, useEffect } from "react";
+import { Lock, ArrowRight, AlertCircle, CheckCircle2, Layers, ArrowLeft } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
-import { useAuth } from "../context/AuthContext";
 import authService from "../services/authService";
 
-const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+const ResetPasswordPage: React.FC = () => {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { theme } = useTheme();
-  const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const email = location.state?.email;
+
+  useEffect(() => {
+    if (!email) {
+      navigate("/forgot-password");
+    }
+  }, [email, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setMessage(null);
+
+    if (newPassword !== confirmPassword) {
+      setMessage({ text: "Les mots de passe ne correspondent pas.", type: "error" });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setMessage({ text: "Le mot de passe doit contenir au moins 6 caractères.", type: "error" });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await authService.login(email, password);
-      
-      if (response.access_token && response.user) {
-        login(response.access_token, response.user);
-        navigate("/");
+      const resetToken = sessionStorage.getItem("reset_token");
+      if (!resetToken) {
+        throw new Error("La session de réinitialisation a expiré. Veuillez demander un nouveau code.");
       }
+
+      await authService.resetPassword(newPassword, resetToken);
+      setMessage({ text: "Mot de passe réinitialisé avec succès! Redirection vers la page de connexion...", type: "success" });
+      
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
     } catch (err: any) {
-      setError(err.response?.data?.message || "Échec de la connexion. Veuillez vérifier vos identifiants.");
+      setMessage({ text: err.response?.data?.message || "Échec de la réinitialisation du mot de passe", type: "error" });
     } finally {
       setLoading(false);
     }
   };
 
-  // Styles remain the same as your original
   const styles: Record<string, React.CSSProperties> = {
     wrapper: {
       display: "flex",
@@ -114,6 +135,17 @@ const LoginPage: React.FC = () => {
       fontWeight: 800,
       color: "var(--text-main)",
     },
+    backLink: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      background: "transparent",
+      border: "none",
+      color: "var(--text-muted)",
+      fontSize: 12,
+      marginBottom: 20,
+      cursor: "pointer",
+    },
     heading: {
       fontSize: 24,
       fontWeight: 800,
@@ -138,8 +170,15 @@ const LoginPage: React.FC = () => {
       borderRadius: 10,
       padding: "10px 12px",
       fontSize: 12,
-      color: "#ef4444",
       marginBottom: 16,
+    },
+    alertSuccess: {
+      background: "rgba(34,197,94,0.08)",
+      border: "1px solid rgba(34,197,94,0.2)",
+      color: "#22c55e",
+    },
+    alertError: {
+      color: "#ef4444",
     },
     fieldGroup: { marginBottom: 16 },
     fieldLabel: {
@@ -188,31 +227,15 @@ const LoginPage: React.FC = () => {
       fontWeight: 700,
       cursor: "pointer",
     },
-    btnArrow: {
-      width: 20,
-      height: 20,
-      background: "rgba(255,255,255,0.2)",
-      borderRadius: "50%",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    footerText: {
-      textAlign: "center",
+    infoBox: {
+      background: "rgba(59,130,246,0.08)",
+      border: "1px solid var(--primary-color-soft)",
+      borderRadius: 10,
+      padding: "12px",
+      marginBottom: 20,
       fontSize: 12,
       color: "var(--text-muted)",
-      marginTop: 20,
-    },
-    footerLink: {
-      color: "var(--primary-color)",
-      textDecoration: "none",
-    },
-    forgotLink: {
-      display: "block",
-      textAlign: "right",
-      fontSize: 11,
-      marginTop: -12,
-      marginBottom: 16,
+      textAlign: "center",
     },
   };
 
@@ -233,41 +256,41 @@ const LoginPage: React.FC = () => {
           </span>
         </div>
 
-        <h1 style={styles.heading}>Content de te revoir</h1>
-        <p style={styles.subheading}>Connectez-vous pour accéder à votre tableau de bord.</p>
+        <button onClick={() => navigate("/forgot-password")} style={styles.backLink}>
+          <ArrowLeft size={14} />
+          Retour
+        </button>
+
+        <h1 style={styles.heading}>Créer un nouveau mot de passe</h1>
+        <p style={styles.subheading}>
+          Saisissez votre nouveau mot de passe ci-dessous
+        </p>
+
+        {email && (
+          <div style={styles.infoBox}>
+            Réinitialisation du mot de passe pour: <strong>{email}</strong>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} style={styles.form}>
-          {error && (
-            <div style={styles.alert}>
-              <AlertCircle size={14} />
-              <span>{error}</span>
+          {message && (
+            <div
+              style={{
+                ...styles.alert,
+                ...(message.type === "success" ? styles.alertSuccess : styles.alertError),
+              }}
+            >
+              {message.type === "error" ? (
+                <AlertCircle size={14} />
+              ) : (
+                <CheckCircle2 size={14} />
+              )}
+              <span>{message.text}</span>
             </div>
           )}
 
           <div style={styles.fieldGroup}>
-            <label style={styles.fieldLabel}>Email</label>
-            <div
-              style={{
-                ...styles.inputRow,
-                ...(focusedField === "email" ? styles.inputRowFocused : {}),
-              }}
-            >
-              <Mail size={15} color="var(--text-muted)" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onFocus={() => setFocusedField("email")}
-                onBlur={() => setFocusedField(null)}
-                placeholder="exemple@exemple.com"
-                required
-                style={styles.input}
-              />
-            </div>
-          </div>
-
-          <div style={styles.fieldGroup}>
-            <label style={styles.fieldLabel}>Mot de passe</label>
+            <label style={styles.fieldLabel}>nouveau mot de passe</label>
             <div
               style={{
                 ...styles.inputRow,
@@ -277,9 +300,31 @@ const LoginPage: React.FC = () => {
               <Lock size={15} color="var(--text-muted)" />
               <input
                 type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
                 onFocus={() => setFocusedField("password")}
+                onBlur={() => setFocusedField(null)}
+                placeholder="•••••••• (min 6 characters)"
+                required
+                style={styles.input}
+              />
+            </div>
+          </div>
+
+          <div style={styles.fieldGroup}>
+            <label style={styles.fieldLabel}>Confirmer le mot de passe</label>
+            <div
+              style={{
+                ...styles.inputRow,
+                ...(focusedField === "confirm" ? styles.inputRowFocused : {}),
+              }}
+            >
+              <Lock size={15} color="var(--text-muted)" />
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onFocus={() => setFocusedField("confirm")}
                 onBlur={() => setFocusedField(null)}
                 placeholder="••••••••"
                 required
@@ -287,10 +332,6 @@ const LoginPage: React.FC = () => {
               />
             </div>
           </div>
-
-          <Link to="/forgot-password" style={styles.forgotLink}>
-            Mot de passe oublié ?
-          </Link>
 
           <button
             type="submit"
@@ -300,24 +341,13 @@ const LoginPage: React.FC = () => {
               opacity: loading ? 0.7 : 1,
             }}
           >
-            {loading ? "Connexion…" : "Se connecter"}
-            {!loading && (
-              <span style={styles.btnArrow}>
-                <ArrowRight size={12} color="white" />
-              </span>
-            )}
+            {loading ? "Réinitialisation..." : "Réinitialiser le mot de passe"}
+            {!loading && <ArrowRight size={16} />}
           </button>
         </form>
-
-        <p style={styles.footerText}>
-          Pas de compte ?{" "}
-          <Link to="/register" style={styles.footerLink}>
-            Créer un →
-          </Link>
-        </p>
       </div>
     </div>
   );
 };
 
-export default LoginPage;
+export default ResetPasswordPage;

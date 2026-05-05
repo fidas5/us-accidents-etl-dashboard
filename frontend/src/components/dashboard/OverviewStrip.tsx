@@ -21,6 +21,15 @@ export const OverviewStrip: React.FC<OverviewStripProps> = ({ overview, sevData,
   };
   const sevMax = Math.max(...sevData.map(d => d.count), 1);
   
+  // Style commun pour les valeurs numériques dans l'aperçu
+  const numberStyle: React.CSSProperties = {
+    fontFamily: "'Inter', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    fontSize: 34,
+    fontWeight: 700,
+    lineHeight: 1.2,
+    letterSpacing: "-0.02em",
+  };
+  
   const kpiStyle: React.CSSProperties = {
     background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14,
     padding: 20, display: "flex", gap: 14, alignItems: "flex-start",
@@ -32,11 +41,11 @@ export const OverviewStrip: React.FC<OverviewStripProps> = ({ overview, sevData,
       <div style={kpiStyle}>
         <div style={{ fontSize: 22, color: t.textFaint, marginTop: 2 }}>◷</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 8 }}>Years covered</div>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 30, fontWeight: 700, color: t.textStrong, lineHeight: 1, marginBottom: 8 }}>
+          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 8 }}>Années disponibles</div>
+          <div style={numberStyle}>
             {overview.years_covered?.length ?? 0}
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
             {(overview.years_covered ?? []).map(y => (
               <span key={y} style={{ fontSize: 10, padding: "3px 9px", borderRadius: 5, background: `${t.accent}14`, color: t.accent, border: `1px solid ${t.accent}28` }}>{y}</span>
             ))}
@@ -48,7 +57,7 @@ export const OverviewStrip: React.FC<OverviewStripProps> = ({ overview, sevData,
         <div style={{ fontSize: 22, color: t.textFaint, marginTop: 2 }}>⚡</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 8 }}>Total accidents</div>
-          <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 30, fontWeight: 700, color: t.textStrong, lineHeight: 1, marginBottom: 8 }}>
+          <div style={numberStyle}>
             {overview.total_accidents ? fmt(overview.total_accidents) : "0"}
           </div>
         </div>
@@ -57,21 +66,21 @@ export const OverviewStrip: React.FC<OverviewStripProps> = ({ overview, sevData,
       <div style={kpiStyle}>
         <div style={{ fontSize: 22, color: t.textFaint, marginTop: 2 }}>◈</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 8 }}>Avg severity</div>
+          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 8 }}>Gravité moyenne(Avg severity)</div>
           <div style={{
-            fontFamily: "'Syne',sans-serif", fontSize: 30, fontWeight: 700, lineHeight: 1, marginBottom: 8,
+            ...numberStyle,
             color: (overview.avg_severity !== null && overview.avg_severity !== undefined) ? sevColor(overview.avg_severity) : t.textMuted,
           }}>
             {(overview.avg_severity !== null && overview.avg_severity !== undefined) ? overview.avg_severity.toFixed(2) : "N/A"}
           </div>
-          <div style={{ fontSize: 10, color: t.textFaint }}>Scale 1 (Low) → 4 (Critical)</div>
+          <div style={{ fontSize: 10, color: t.textFaint, marginTop: 8 }}>Échelle 1 (Faible) → 4 (Critique)</div>
         </div>
       </div>
 
       <div style={kpiStyle}>
         <div style={{ fontSize: 22, color: t.textFaint, marginTop: 2 }}>▦</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 12 }}>Severity breakdown</div>
+          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 12 }}>Analyse de la gravité</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {sevData.map(r => (
               <div key={r.severity} style={{ display: "flex", alignItems: "center", gap: 8 }}>

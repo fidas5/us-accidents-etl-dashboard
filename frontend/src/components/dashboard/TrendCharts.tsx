@@ -21,7 +21,7 @@ interface TrendChartsProps {
 
 export const TrendCharts: React.FC<TrendChartsProps> = ({ monthData, yearData, t }) => (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-    <Card title="Monthly trend" t={t}>
+    <Card title="Tendance mensuelle" t={t}>
       <ResponsiveContainer width="100%" height={200}>
         <LineChart data={monthData} margin={{ top: 8, right: 8, left: -10, bottom: 0 }}>
           <defs>
@@ -39,10 +39,10 @@ export const TrendCharts: React.FC<TrendChartsProps> = ({ monthData, yearData, t
       </ResponsiveContainer>
     </Card>
 
-    <Card title="Year-over-year" t={t}>
+    <Card title="comparaison annuelle" t={t}>
       {yearData.length < 2 ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, fontSize: 12, color: t.textMuted }}>
-          Need ≥ 2 years of data for YoY comparison
+          Au moins 2 ans de données sont nécessaires pour la comparaison annuelle
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={200}>

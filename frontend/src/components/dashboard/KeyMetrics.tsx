@@ -23,8 +23,17 @@ const sevColor = (avg: number) => {
 const StatCard: React.FC<{ label: string; value: string | number | null; unit?: string; note?: string; color?: string; t: T }> = ({ label, value, unit, note, color, t }) => (
   <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: "18px 20px", boxShadow: `0 1px 4px ${t.shadow}` }}>
     <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 10 }}>{label}</div>
-    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: 32, fontWeight: 700, color: color || t.textStrong, lineHeight: 1 }}>
-      {value !== null && value !== undefined ? value : "N/A"}{unit && <span style={{ fontSize: 16, fontWeight: 400, color: t.textMuted, marginLeft: 4 }}>{unit}</span>}
+    {/* Changement de police ici : 'Inter' pour les nombres */}
+    <div style={{ 
+      fontFamily: "'Inter', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
+      fontSize: 36, 
+      fontWeight: 700, 
+      color: color || t.textStrong, 
+      lineHeight: 1.2,
+      letterSpacing: "-0.02em"
+    }}>
+      {value !== null && value !== undefined ? value : "N/A"}
+      {unit && <span style={{ fontSize: 16, fontWeight: 500, color: t.textMuted, marginLeft: 4 }}>{unit}</span>}
     </div>
     {note && <div style={{ fontSize: 10, color: t.textFaint, marginTop: 8 }}>{note}</div>}
   </div>
@@ -33,14 +42,11 @@ const StatCard: React.FC<{ label: string; value: string | number | null; unit?: 
 export const KeyMetrics: React.FC<KeyMetricsProps> = ({ avgDuration, highSeverityRate, riskMultiplier, rushHourIndex, nightRiskMult, durBySev, t }) => (
   <>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 16 }} className="db-4col">
-      <StatCard label="Avg accident duration" value={avgDuration !== null ? avgDuration.toFixed(1) : null} unit="min" t={t} />
-      <StatCard label="High severity rate" value={highSeverityRate !== null ? highSeverityRate.toFixed(1) : null} unit="%" color={highSeverityRate !== null ? sevColor((highSeverityRate / 25) * 4) : undefined} t={t} />
-      <StatCard label="Risk multiplier" value={riskMultiplier?.risk_multiplier?.toFixed(2) ?? null} note={riskMultiplier?.note} color={riskMultiplier ? sevColor(riskMultiplier.risk_multiplier) : undefined} t={t} />
-      <StatCard label="Rush hour severity" value={rushHourIndex !== null ? rushHourIndex.toFixed(2) : null} color={rushHourIndex !== null ? sevColor(rushHourIndex) : undefined} note="Avg severity during peak hours (7-9 AM, 4-7 PM)" t={t} />
+      <StatCard label="Durée moyenne de l'accident" value={avgDuration !== null ? avgDuration.toFixed(1) : null} unit="min" t={t} />
+      <StatCard label="Durée moyenne — gravité critique" value={durBySev.find(d => d.severity === 4)?.avg_duration_min?.toFixed(1) ?? null} unit="min" color="#f43f5e" t={t} />
+      <StatCard label="gravité de l'heure de pointe" value={rushHourIndex !== null ? rushHourIndex.toFixed(2) : null} color={rushHourIndex !== null ? sevColor(rushHourIndex) : undefined} note="Gravité moyenne aux heures de pointe (7h-9h, 16h-19h)" t={t} />
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16, marginBottom: 16 }} className="db-2col">
-      <StatCard label="Night risk multiplier" value={nightRiskMult?.night_risk_multiplier?.toFixed(2) ?? null} note="How much more severe accidents are at night (8 PM - 6 AM)" color={nightRiskMult ? sevColor(nightRiskMult.night_risk_multiplier * 2) : undefined} t={t} />
-      <StatCard label="Avg duration — critical severity" value={durBySev.find(d => d.severity === 4)?.avg_duration_min?.toFixed(1) ?? null} unit="min" color="#f43f5e" t={t} />
     </div>
   </>
 );

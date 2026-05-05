@@ -22,7 +22,7 @@ export const WeatherChart: React.FC<WeatherChartProps> = ({ data, t }) => {
   return (
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Weather impact on severity</span>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>impact des conditions météorologiques sur la gravité</span>
       </div>
       <div style={{
         maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 7,
@@ -49,8 +49,7 @@ export const WeatherChart: React.FC<WeatherChartProps> = ({ data, t }) => {
         ))}
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 8, fontSize: 10, color: t.textFaint }}>
-        <span>Bar = count</span><span>·</span><span>Right = avg severity</span>
-      </div>
+<span>Barre = nombre</span><span>·</span><span>Droite = gravité moyenne</span>      </div>
     </div>
   );
 };

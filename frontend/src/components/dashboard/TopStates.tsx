@@ -23,7 +23,7 @@ export const TopStates: React.FC<TopStatesProps> = ({ data, t }) => {
   return (
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Top 10 states</span>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Top 10 États</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {data.slice(0, 10).map((d, i) => {

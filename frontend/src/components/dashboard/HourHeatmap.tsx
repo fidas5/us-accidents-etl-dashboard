@@ -32,7 +32,7 @@ export const HourHeatmap: React.FC<HourHeatmapProps> = ({ grid, t }) => {
   return (
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Peak hour heatmap</span>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Carte de chaleur des heures de pointe</span>
       </div>
       <div style={{ overflowX: "auto" }}>
         <div style={{ display: "inline-grid", gridTemplateColumns: `52px repeat(24, ${cellSize}px)`, gap: 2, minWidth: "fit-content" }}>
@@ -62,12 +62,12 @@ export const HourHeatmap: React.FC<HourHeatmapProps> = ({ grid, t }) => {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, fontSize: 10, color: t.textFaint }}>
-        <span>Low</span>
+        <span>Faible</span>
         {["#1e3a5f", "#1d5fa3", "#f59e0b", "#fb923c", "#f43f5e"].map(c => (
           <div key={c} style={{ width: 14, height: 14, borderRadius: 2, background: c }} />
         ))}
-        <span>High</span>
-        <span style={{ marginLeft: "auto" }}>Hover a cell for exact count</span>
+        <span>Élevé</span>
+        <span style={{ marginLeft: "auto" }}>Survolez une cellule pour voir le nombre exact</span>
       </div>
     </div>
   );

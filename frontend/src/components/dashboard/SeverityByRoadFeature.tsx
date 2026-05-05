@@ -40,10 +40,10 @@ export const SeverityByRoadFeature: React.FC<SeverityByRoadFeatureProps> = ({ da
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>
-          Severity by road feature
+          Gravité par caractéristique routière
         </span>
         <span style={{ fontSize: 10, padding: "3px 9px", borderRadius: 5, background: t.inputBg, border: `1px solid ${t.border}`, color: t.textMuted }}>
-          Infrastructure impact
+          impact des infrastructures
         </span>
       </div>
 

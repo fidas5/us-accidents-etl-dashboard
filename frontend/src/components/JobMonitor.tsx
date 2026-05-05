@@ -56,7 +56,7 @@ export const JobMonitor: React.FC<JobMonitorProps> = ({ onJobCancelled }) => {
   useEffect(() => {
     fetchRunningJobs();
     // Poll every 3 seconds for updates
-    const interval = setInterval(fetchRunningJobs, 3000);
+    const interval = setInterval(fetchRunningJobs, 120000);
     return () => clearInterval(interval);
   }, [token]);
 
@@ -69,7 +69,7 @@ export const JobMonitor: React.FC<JobMonitorProps> = ({ onJobCancelled }) => {
       <div className="job-monitor-header">
         <div className="job-monitor-title">
           <Loader size={14} className="spin" />
-          Running Jobs ({runningJobs.length})
+          Tâches en cours ({runningJobs.length})
         </div>
       </div>
       <div className="job-monitor-list">
@@ -78,8 +78,7 @@ export const JobMonitor: React.FC<JobMonitorProps> = ({ onJobCancelled }) => {
             <div className="job-info">
               <span className="job-name">{job.name}</span>
               <span className="job-duration">
-                Running for {Math.floor(job.duration_seconds)}s
-              </span>
+En cours depuis {Math.floor(job.duration_seconds)}s              </span>
             </div>
             <button
               className="job-cancel-btn"
@@ -91,7 +90,7 @@ export const JobMonitor: React.FC<JobMonitorProps> = ({ onJobCancelled }) => {
               ) : (
                 <Square size={14} />
               )}
-              Stop
+              Arrêter
             </button>
           </div>
         ))}

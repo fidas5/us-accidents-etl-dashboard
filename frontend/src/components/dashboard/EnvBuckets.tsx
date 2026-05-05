@@ -33,7 +33,7 @@ export const EnvBuckets: React.FC<EnvBucketsProps> = ({ tempBuckets, visBuckets,
             <div style={{ height: "100%", width: `${d.pct}%`, borderRadius: 4, background: colors[d.bucket] ?? t.accent, transition: "width .4s ease" }} />
           </div>
           <div style={{ fontSize: 10, color: t.textFaint, marginTop: 3 }}>
-            Avg severity: <span style={{ color: sevColor(d.avg_severity) }}>{d.avg_severity?.toFixed(2) ?? "N/A"}</span>
+            Gravité moyenne(Avg severity): <span style={{ color: sevColor(d.avg_severity) }}>{d.avg_severity?.toFixed(2) ?? "N/A"}</span>
           </div>
         </div>
       ))}
@@ -44,13 +44,13 @@ export const EnvBuckets: React.FC<EnvBucketsProps> = ({ tempBuckets, visBuckets,
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
       <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
         <div style={{ marginBottom: 20 }}>
-          <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Temperature buckets</span>
+          <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Catégories de température</span>
         </div>
         <BucketBars data={tempBuckets} colors={TEMP_COLORS} />
       </div>
       <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
         <div style={{ marginBottom: 20 }}>
-          <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Visibility buckets</span>
+          <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Catégories de visibilité</span>
         </div>
         <BucketBars data={visBuckets} colors={VIS_COLORS} />
       </div>

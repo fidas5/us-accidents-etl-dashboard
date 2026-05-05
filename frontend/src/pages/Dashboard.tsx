@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import axios, { AxiosError } from "axios";
 import { useAuth } from "../context/AuthContext";
-import AIChat from '../components/AIChat';
 
 // Import all components
 import { SectionDivider } from "../components/dashboard/SectionDivider";
@@ -219,7 +218,7 @@ export default function Dashboard() {
   // Loading / error states
   if (loading) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, minHeight: "100vh", color: "#64748b", fontSize: 13 }}>
-      <div className="db-spinner" /><span>Loading dashboard…</span>
+      <div className="db-spinner" /><span>Chargement du tableau de bord…</span>
     </div>
   );
 
@@ -228,7 +227,7 @@ export default function Dashboard() {
       <span style={{ fontSize: 20 }}>⚠</span>
       <div>
         {error || "No data available."}
-        <div style={{ marginTop: 6, fontSize: 11, color: "#64748b" }}>Run <strong>Build Datamart</strong> on the ETL page first.</div>
+        <div style={{ marginTop: 6, fontSize: 11, color: "#64748b" }}>Exécutez d'abord <strong>Créer un datamart</strong> sur la page ETL.</div>
       </div>
     </div>
   );
@@ -240,22 +239,33 @@ export default function Dashboard() {
       <style>{globalStyles}</style>
       <div className="db-root">
         {/* Header */}
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${t.hoverBg},${t.cardBg})`, border: `1px solid ${t.borderAccent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: t.accent }}>◈</div>
-            <div>
-              <h1 style={{ fontFamily: "'Syne',sans-serif", fontSize: 22, fontWeight: 800, color: t.textStrong, margin: "0 0 2px", letterSpacing: "-.02em" }}>Accident Analytics</h1>
-              <p style={{ fontSize: 11, color: t.textMuted, margin: 0 }}>US Datamart · Real-time statistics</p>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {refetching && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: t.textMuted }}><span className="db-pulse" /> Updating</span>}
-            <button onClick={() => setShowFilterPanel(v => !v)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 8, background: showFilterPanel ? t.hoverBg : t.inputBg, border: `1px solid ${showFilterPanel ? t.borderAccent : t.border}`, color: showFilterPanel ? t.textBase : t.textMuted, fontSize: 12, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer" }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 2h12M3 7h8M5 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              Filters {activeFilterCount > 0 && <span style={{ background: t.accent, color: t.accentFg, borderRadius: 99, padding: "1px 6px", fontSize: 10, fontWeight: 600 }}>{activeFilterCount}</span>}
-            </button>
-          </div>
-        </header>
+
+{/* Header - Modifier le h1 */}
+<header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 14 }}>
+  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+    <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${t.hoverBg},${t.cardBg})`, border: `1px solid ${t.borderAccent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: t.accent }}>◈</div>
+    <div>
+      <h1 style={{ 
+        fontFamily: "'Inter', 'Syne', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", 
+        fontSize: 30, 
+        fontWeight: 700, 
+        color: t.textStrong, 
+        margin: "0 0 2px", 
+        letterSpacing: "-0.02em",
+        lineHeight: 1.3
+      }}>
+        Analyse des accidents
+      </h1>
+    </div>
+  </div>
+  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    {refetching && <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: t.textMuted }}><span className="db-pulse" /> Mise à jour</span>}
+    <button onClick={() => setShowFilterPanel(v => !v)} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 8, background: showFilterPanel ? t.hoverBg : t.inputBg, border: `1px solid ${showFilterPanel ? t.borderAccent : t.border}`, color: showFilterPanel ? t.textBase : t.textMuted, fontSize: 12, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer" }}>
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 2h12M3 7h8M5 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+      Filtres {activeFilterCount > 0 && <span style={{ background: t.accent, color: t.accentFg, borderRadius: 99, padding: "1px 6px", fontSize: 10, fontWeight: 600 }}>{activeFilterCount}</span>}
+    </button>
+  </div>
+</header>
 
         {/* Year bar */}
         {availableYears.length > 1 && <YearBar years={availableYears} selectedYears={filters.year} onToggle={y => toggle("year", y)} onSelectAll={() => setFilters(f => ({ ...f, year: [] }))} t={t} />}
@@ -267,13 +277,13 @@ export default function Dashboard() {
         <PillsRow filters={filters} onRemoveYear={y => removeFilter("year", y)} onRemoveMonth={v => removeFilter("month", v)} onRemoveSeverity={v => removeFilter("severity", v)} onRemoveState={s => removeFilter("state", s)} onClearAll={resetFilters} />
 
         {/* Sections */}
-        <SectionDivider label="Overview" t={t} />
+        <SectionDivider label="Aperçu" t={t} />
         <OverviewStrip overview={overview} sevData={sevData} t={t} />
 
-        <SectionDivider label="Key Metrics" t={t} />
+        <SectionDivider label="Indicateurs clés" t={t} />
         <KeyMetrics avgDuration={avgDuration} highSeverityRate={highSeverityRate} riskMultiplier={riskMultiplier} rushHourIndex={rushHourIndex} nightRiskMult={nightRiskMult} durBySev={durBySev} t={t} />
 {/* Section: Breakdowns */}
-<SectionDivider label="Breakdowns" t={t} />
+<SectionDivider label="décompositions" t={t} />
 
 {/* Row 1: Severity Distribution and Weather Impact */}
 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
@@ -293,23 +303,20 @@ export default function Dashboard() {
 
 
 
-        <SectionDivider label="Trends" t={t} />
+        <SectionDivider label="Tendances" t={t} />
         <TrendCharts monthData={monthData} yearData={yearData} t={t} />
 
-        <SectionDivider label="Geography" t={t} />
+        <SectionDivider label="Géographie" t={t} />
         <TopStates data={stateData} t={t} />
         <div style={{ marginTop: 16 }}><USMap cities={mapData?.top_cities ?? []} t={t} isDark={isDark} /></div>
 
-        <SectionDivider label="Time Patterns" t={t} />
+        <SectionDivider label="Patterns temporels" t={t} />
         <HourHeatmap grid={hourGrid} t={t} />
 
-        <SectionDivider label="Environment" t={t} />
+        <SectionDivider label="Environnement" t={t} />
         <EnvBuckets tempBuckets={tempBuckets} visBuckets={visBuckets} t={t} />
 
-        
-
-        <AIChat />
-      </div>
+              </div>
     </>
   );
 }

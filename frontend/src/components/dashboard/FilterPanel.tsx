@@ -30,27 +30,27 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22, marginBottom: 20, boxShadow: `0 4px 20px ${t.shadow}` }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 18 }}>
         <div>
-          <div style={{ fontSize: 10, fontWeight: 600, color: t.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Month</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: t.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Mois</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {MONTHS.map(m => <button key={m.value} style={filters.month.includes(m.value) ? on : base} onClick={() => onToggleMonth(m.value)}>{m.name.slice(0, 3)}</button>)}
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 10, fontWeight: 600, color: t.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Severity</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: t.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Gravité(Severity)</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {SEV_OPTIONS.map(s => <button key={s.value} style={filters.severity.includes(s.value) ? { ...on, borderColor: s.color, color: s.color, background: `${s.color}18` } : base} onClick={() => onToggleSeverity(s.value)}>{s.label}</button>)}
           </div>
         </div>
         <div style={{ gridColumn: "1/-1" }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: t.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>State</div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: t.accent, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>État</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {ALL_STATES.map(s => <button key={s} style={filters.state.includes(s) ? on : base} onClick={() => onToggleState(s)}>{s}</button>)}
           </div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={onReset} style={{ height: 36, padding: "0 16px", borderRadius: 8, background: "transparent", border: `1px solid ${t.border}`, color: t.textMuted, fontSize: 12, cursor: "pointer", fontFamily: "monospace" }}>Reset all</button>
-        <button onClick={onApply} style={{ flex: 1, height: 36, borderRadius: 8, background: t.accent, color: t.accentFg, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "monospace" }}>Apply filters</button>
+        <button onClick={onReset} style={{ height: 36, padding: "0 16px", borderRadius: 8, background: "transparent", border: `1px solid ${t.border}`, color: t.textMuted, fontSize: 12, cursor: "pointer", fontFamily: "monospace" }}>Réinitialiser tout</button>
+        <button onClick={onApply} style={{ flex: 1, height: 36, borderRadius: 8, background: t.accent, color: t.accentFg, border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "monospace" }}>Appliquer les filtres</button>
       </div>
     </div>
   );

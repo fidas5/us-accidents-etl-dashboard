@@ -105,29 +105,29 @@ const REQUIRED_COLUMNS = [
 const JOBS: Job[] = [
   {
     id: "load-raw",
-    label: "Load Raw",
-    description: "Ingest CSV → accidents_raw staging table (appends new years, skips duplicates)",
+    label: "Charger les données brutes",
+    description: "Ingestion CSV → table accidents_raw (ajout des nouvelles années, suppression des doublons)",
     endpoint: "/etl/load-raw",
     dependsOn: "__upload__",
-    lockHint: "Upload and analyze a valid CSV file first",
+    lockHint: "Téléchargez et analysez d’abord un fichier CSV valide",
     icon: <Database size={14} />,
   },
   {
     id: "build-clean",
-    label: "Build Clean",
-    description: "Validate, convert units (°C / km) and enrich → accidents_clean",
+    label: "Construire les données nettoyées",
+    description: "Validation, conversion des unités (°C / km) et enrichissement → accidents_clean",
     endpoint: "/etl/build-clean",
     dependsOn: "load-raw",
-    lockHint: 'Complete "Load Raw" first',
+    lockHint: 'Terminez d’abord "Charger les données brutes"',
     icon: <Zap size={14} />,
   },
   {
     id: "build-datamart",
-    label: "Build Datamart",
-    description: "Create star schema dimensions and fact table for analytics (incremental)",
+    label: "Construire le datamart",
+    description: "Création du schéma en étoile (dimensions et table de faits) pour l’analyse (incrémental)",
     endpoint: "/etl/build-datamart",
     dependsOn: "build-clean",
-    lockHint: 'Complete "Build Clean" first',
+    lockHint: 'Terminez d’abord "Construire les données nettoyées"',
     icon: <BarChart3 size={14} />,
   },
 ];
@@ -139,12 +139,12 @@ function extractErrorMessage(err: unknown): string {
     const data = err.response?.data;
     if (data?.detail) return String(data.detail);
     if (data?.message) return String(data.message);
-    if (err.code === "ECONNABORTED") return "Request timed out — the job is still running on the server.";
-    if (!err.response) return "Cannot reach the server. Is the backend running?";
+    if (err.code === "ECONNABORTED") return "le traitement est toujours en cours sur le serveur";
+    if (!err.response) return "Impossible de joindre le serveur?";
     return `Server error ${err.response.status}: ${err.response.statusText}`;
   }
   if (err instanceof Error) return err.message;
-  return "An unexpected error occurred.";
+  return "Une erreur inattendue s’est produite.";
 }
 
 function fmt(n?: number) {
@@ -273,7 +273,7 @@ export default function ETLPage() {
         timeout: 120_000,
       });
       setUploadStatus("success");
-      setUploadMsg(res.data.message ?? "Uploaded successfully");
+      setUploadMsg(res.data.message ?? "Téléchargement réussi");
       
       analysisDoneRef.current = false;
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -295,7 +295,7 @@ export default function ETLPage() {
       if (!forceRefresh && analysisDoneRef.current && csvAnalysis) return;
       
       if (analysisInProgressRef.current) {
-        console.log("Analysis already in progress, skipping...");
+        console.log("Analyse déjà en cours, opération ignorée...");
         return;
       }
 
@@ -360,7 +360,7 @@ export default function ETLPage() {
       }
     } catch (err) {
       if (!(err instanceof AxiosError && err.response?.status === 401)) {
-        console.error("Pipeline status check failed:", extractErrorMessage(err));
+        console.error("Vérification du statut du pipeline échouée:", extractErrorMessage(err));
       }
     } finally {
       setCheckingStatus(false);
@@ -378,7 +378,7 @@ export default function ETLPage() {
       });
       setJobHistory(res.data.jobs ?? []);
     } catch (err) {
-      console.error("Failed to fetch job history:", extractErrorMessage(err));
+      console.error("Échec de la récupération de l'historique des tâches:", extractErrorMessage(err));
     } finally {
       setIsLoadingHistory(false);
     }
@@ -478,7 +478,7 @@ export default function ETLPage() {
       await fetchJobHistory();
     } catch (err) {
       const msg = extractErrorMessage(err);
-      setPipelineError(`Pipeline resume failed: ${msg}`);
+      setPipelineError(`Impossible de reprendre le pipeline: ${msg}`);
     } finally {
       setResuming(false);
     }
@@ -891,8 +891,8 @@ export default function ETLPage() {
 
       <div className="etl-page">
         <div className="etl-header">
-          <h1 className="etl-title">ETL Pipeline</h1>
-          <p className="etl-sub">Upload dataset → analyze → select year → run pipeline</p>
+          <h1 className="etl-title">Pipeline ETL </h1>
+<p className="etl-sub">Importer le dataset → analyser → sélectionner l’année → exécuter le pipeline</p>
         </div>
 
         {pipelineError && (
@@ -918,7 +918,7 @@ export default function ETLPage() {
           <div className="etl-running">
             <div className="etl-running-hd">
               <Loader size={13} className="etl-spin" />
-              Running Jobs ({runningJobs.length})
+              Tâches en cours ({runningJobs.length})
             </div>
             {runningJobs.map((j) => (
               <div key={j.job_id} className="etl-running-item">
@@ -934,23 +934,23 @@ export default function ETLPage() {
         <div className="etl-grid">
           {/* Upload card */}
           <div className="etl-card">
-            <div className="etl-card-title">Step 1 — Upload CSV</div>
-            <div className="etl-card-desc">US Accidents dataset (any year range)</div>
+            <div className="etl-card-title">Étape 1 — Importer le CSV</div>
+            <div className="etl-card-desc">Jeu de données des accidents routiers aux États-Unis (toute période)</div>
 
             <div
               className={`etl-upload-zone ${colErrors.length > 0 ? "zone-invalid" : colOk ? "zone-valid" : ""}`}
               onClick={() => fileRef.current?.click()}
             >
               <Upload size={22} color={colErrors.length > 0 ? "#f87171" : colOk ? "#4ade80" : "#3b82f6"} />
-              <span className="etl-upload-label">Click to browse or drag & drop</span>
-              <span className="etl-upload-label" style={{ fontSize: 10 }}>.csv files only</span>
+              <span className="etl-upload-label">Cliquez pour parcourir ou glissez-déposez</span>
+              <span className="etl-upload-label" style={{ fontSize: 10 }}>fichiers .csv seulement</span>
               {file && <div className="etl-file-name">{file.name}</div>}
             </div>
             <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={handleFileChange} />
 
             {colErrors.length > 0 && (
               <div className="etl-col-errors">
-                <strong>Missing required columns:</strong> {colErrors.join(", ")}
+                <strong>Colonnes requises manquantes:</strong> {colErrors.join(", ")}
               </div>
             )}
 
@@ -959,7 +959,7 @@ export default function ETLPage() {
               disabled={!file || uploadStatus === "loading" || uploadStatus === "success" || colErrors.length > 0}
               onClick={handleUpload}
             >
-              {uploadStatus === "loading" ? <><Loader size={13} className="etl-spin" /> Uploading…</> : uploadStatus === "success" ? <><CheckCircle2 size={13} /> Uploaded</> : <><Upload size={13} /> Upload File</>}
+              {uploadStatus === "loading" ? <><Loader size={13} className="etl-spin" /> Chargement..</> : uploadStatus === "success" ? <><CheckCircle2 size={13} /> Uploaded</> : <><Upload size={13} /> Upload File</>}
             </button>
 
             {uploadMsg && (
@@ -972,15 +972,15 @@ export default function ETLPage() {
             {isAnalyzing && (
               <div className="etl-analyzing">
                 <Loader size={13} className="etl-spin" />
-                Scanning CSV for year distribution…
+                Analyse du CSV pour la distribution annuelle…
               </div>
             )}
 
             {uploadStatus === "success" && !csvAnalysis && !isAnalyzing && (
               <div className="etl-analyzing" style={{ marginTop: '12px' }}>
                 <AlertCircle size={13} />
-                CSV uploaded but analysis not available. 
-                <button onClick={() => analyzeCSV(true)}>Retry Analysis</button>
+                CSV importé, mais l’analyse n’est pas disponible.
+                <button onClick={() => analyzeCSV(true)}>Réessayer l’analyse</button>
               </div>
             )}
 
@@ -988,24 +988,24 @@ export default function ETLPage() {
               <div className="etl-year-sel">
                 <div className="etl-year-hd">
                   <BarChart3 size={13} />
-                  Data Summary &amp; Year Filter
+                  Résumé des données &amp; Filtre par année
                   <button className="etl-year-refresh-btn" onClick={() => analyzeCSV(true)}>
-                    <RefreshCw size={10} /> Refresh
+                    <RefreshCw size={10} /> Actualiser
                   </button>
                 </div>
                 <div className="etl-year-stats">
                   <div className="etl-year-stat">
-                    <div className="etl-year-stat-lbl">Total Rows</div>
+                    <div className="etl-year-stat-lbl">Total lignes</div>
                     <div className="etl-year-stat-val">{fmt(csvAnalysis.total_rows_scanned)}</div>
                   </div>
                   <div className="etl-year-stat">
-                    <div className="etl-year-stat-lbl">Years Found</div>
+                    <div className="etl-year-stat-lbl">Années trouvées</div>
                     <div className="etl-year-stat-val">{csvAnalysis.available_years?.length ?? 0}</div>
                   </div>
                 </div>
                 <div className="etl-year-btns">
                   <button className={`etl-year-btn ${selectedYear === "all" ? "active" : ""}`} onClick={() => setSelectedYear("all")}>
-                    All ({fmt(csvAnalysis.total_rows_scanned)})
+                    tout ({fmt(csvAnalysis.total_rows_scanned)})
                   </button>
                   {csvAnalysis.available_years?.map((y) => (
                     <button key={y} className={`etl-year-btn ${selectedYear === y ? "active" : ""}`} onClick={() => setSelectedYear(y)}>
@@ -1019,8 +1019,8 @@ export default function ETLPage() {
 
           {/* Pipeline card */}
           <div className="etl-card">
-            <div className="etl-card-title">Step 2 — Run Pipeline</div>
-            <div className="etl-card-desc">Execute ETL jobs in sequence</div>
+           <div className="etl-card-title">Étape 2 — Exécuter le pipeline</div>
+<div className="etl-card-desc">Exécuter les tâches ETL de manière séquentielle</div>
 
             <div className="etl-jobs-list">
               {JOBS.map((job, idx) => {
@@ -1039,21 +1039,21 @@ export default function ETLPage() {
                       <div className="etl-job-name">
                         {job.icon} {idx + 1}. {job.label}
                         {isPartial && <span className="etl-job-badge badge-partial">Incomplete</span>}
-                        {isError && <span className="etl-job-badge badge-error">Failed</span>}
+                        {isError && <span className="etl-job-badge badge-error">Échec</span>}
                       </div>
                       <div className="etl-job-desc">{job.description}</div>
                       {!unlocked && <div className="etl-job-lock"><Lock size={10} /> {job.lockHint}</div>}
                       {isPartial && dmInfo && dmInfo.missing_records > 0 && (
-                        <div className="etl-job-warning">⚠ {fmt(dmInfo.missing_records)} missing records — {dmInfo.completion_percentage}% complete</div>
+                        <div className="etl-job-warning">⚠ {fmt(dmInfo.missing_records)} enregistrements manquants — {dmInfo.completion_percentage}% complete</div>
                       )}
                       {!isDone && !isPartial && dmInfo?.exists && !dmInfo.is_complete && (
-                        <div className="etl-job-warning">⚠ Datamart needs rebuild — {fmt(dmInfo.missing_records)} missing</div>
+                        <div className="etl-job-warning">⚠ Le datamart nécessite une reconstruction — {fmt(dmInfo.missing_records)} manquants</div>
                       )}
                       {isError && result?.message && <div className="etl-job-error-msg">✕ {result.message}</div>}
                       {(isDone || isPartial) && result && (
                         <div className="etl-job-pills">
-                          {result.rows_inserted != null && <span className="etl-pill pill-green">{fmt(result.rows_inserted)} inserted</span>}
-                          {result.rows_skipped != null && result.rows_skipped > 0 && <span className="etl-pill pill-yellow">{fmt(result.rows_skipped)} skipped</span>}
+                          {result.rows_inserted != null && <span className="etl-pill pill-green">{fmt(result.rows_inserted)} inséré</span>}
+                          {result.rows_skipped != null && result.rows_skipped > 0 && <span className="etl-pill pill-yellow">{fmt(result.rows_skipped)} ignoré</span>}
                           {result.filter_applied && <span className="etl-pill pill-blue">{result.filter_applied}</span>}
                         </div>
                       )}
@@ -1070,26 +1070,26 @@ export default function ETLPage() {
             </div>
 
             <button className="etl-reset-btn" onClick={resetAllJobs}>
-              <RotateCcw size={13} /> Reset All Jobs
+              <RotateCcw size={13} /> Réinitialiser toutes les tâches
             </button>
           </div>
         </div>
 
         <button className="etl-history-toggle" onClick={() => { setShowHistory((v) => { if (!v) fetchJobHistory(); return !v; }); }}>
-          <History size={14} /> Job History <span className="hd-count">{jobHistory.length} runs</span>
+          <History size={14} /> Historique des tâches <span className="hd-count">{jobHistory.length} exécutions</span>
           {showHistory ? <ChevronUp size={13} style={{ marginLeft: 4 }} /> : <ChevronDown size={13} style={{ marginLeft: 4 }} />}
         </button>
 
         {showHistory && (
           <div className="etl-history-panel">
             <div className="etl-history-hd">
-              <History size={13} /> Recent ETL Runs
+              <History size={13} /> Exécutions ETL récentes
               <button className="etl-history-refresh" onClick={fetchJobHistory} disabled={isLoadingHistory}>
-                {isLoadingHistory ? <Loader size={12} className="etl-spin" /> : <><RefreshCw size={12} /> Refresh</>}
+                {isLoadingHistory ? <Loader size={12} className="etl-spin" /> : <><RefreshCw size={12} /> Actualiser</>}
               </button>
             </div>
             {isLoadingHistory && <div className="etl-history-empty"><Loader size={16} className="etl-spin" style={{ margin: "0 auto" }} /></div>}
-            {!isLoadingHistory && jobHistory.length === 0 && <div className="etl-history-empty">No ETL jobs have been run yet.</div>}
+            {!isLoadingHistory && jobHistory.length === 0 && <div className="etl-history-empty">Aucune tâche ETL n'a encore été exécutée.</div>}
             {!isLoadingHistory && jobHistory.length > 0 && (
               <div className="etl-history-list">
                 {jobHistory.map((j) => (
@@ -1146,10 +1146,10 @@ function PipelineStatusPanel({ status, checking, resuming, uploadDone, onRefresh
       <div className="etl-pipeline-hd">
         <div className="etl-pipeline-title">
           <RefreshCw size={13} className={checking ? "etl-spin" : ""} />
-          Pipeline Status — incomplete steps
+          État du pipeline — étapes incomplètes
         </div>
         <button className="etl-pipeline-refresh" onClick={onRefresh} disabled={checking}>
-          {checking ? <Loader size={12} className="etl-spin" /> : <><RefreshCw size={12} /> Refresh</>}
+          {checking ? <Loader size={12} className="etl-spin" /> : <><RefreshCw size={12} /> Actualiser</>}
         </button>
       </div>
       <div className="etl-pipeline-steps">
@@ -1160,7 +1160,7 @@ function PipelineStatusPanel({ status, checking, resuming, uploadDone, onRefresh
               <div className="etl-ps-icon">{s.icon}</div>
               <div className="etl-ps-name">{s.name}</div>
               {s.count > 0 && <div className="etl-ps-count">{s.count.toLocaleString()}</div>}
-              {s.missingRecords != null && s.missingRecords > 0 && <div className="etl-ps-warn">⚠ {s.missingRecords.toLocaleString()} missing</div>}
+              {s.missingRecords != null && s.missingRecords > 0 && <div className="etl-ps-warn">⚠ {s.missingRecords.toLocaleString()} manquants</div>}
               {s.completionPct != null && s.completionPct < 100 && s.completionPct > 0 && (
                 <div className="etl-ps-prog">
                   <div className="etl-ps-bar" style={{ width: `${s.completionPct}%` }} />
@@ -1174,7 +1174,7 @@ function PipelineStatusPanel({ status, checking, resuming, uploadDone, onRefresh
       </div>
       {needsResume && (
         <button className="etl-resume-btn" onClick={onResume} disabled={resuming}>
-          {resuming ? <><Loader size={13} className="etl-spin" /> Resuming pipeline…</> : <><PlayCircle size={13} /> Resume Pipeline — fix incomplete steps</>}
+          {resuming ? <><Loader size={13} className="etl-spin" /> Reprise du pipeline…</> : <><PlayCircle size={13} /> Reprendre le pipeline — corriger les étapes incomplètes</>}
         </button>
       )}
      

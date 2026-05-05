@@ -9,9 +9,9 @@ import {
 import { useTheme } from "../context/ThemeContext";
 
 const navigation = [
-  { name: "Dashboard",    href: "/",       icon: LayoutDashboard },
-  { name: "ETL Jobs",     href: "/etl",    icon: Database },
-  { name: "Predictions",  href: "/predict",icon: BrainCircuit },
+  { name: "Tableau de bord",    href: "/",       icon: LayoutDashboard },
+  { name: "tâches ETL ",     href: "/etl",    icon: Database },
+  { name: "prédictions",  href: "/predict",icon: BrainCircuit },
 
   
 ];
@@ -328,8 +328,8 @@ export default function Layout() {
         <aside className="sidebar">
           <div className="sidebar-brand">
             <div className="sidebar-brand-icon"><Car size={16} /></div>
-            US Accidents
-          </div>
+            Accidents aux États-Unis
+                      </div>
 
           <ul className="sidebar-nav">
             {navigation.map((item) => (

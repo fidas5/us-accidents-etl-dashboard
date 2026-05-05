@@ -27,12 +27,12 @@ export const PillsRow: React.FC<PillsRowProps> = ({
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 20 }}>
-      <span style={{ fontSize: 11, color: "#64748b" }}>Filters:</span>
+      <span style={{ fontSize: 11, color: "#64748b" }}>Filtres:</span>
       {filters.year.map(y => <Pill key={`y-${y}`} color="#818cf8" onX={() => onRemoveYear(y)}>{y}</Pill>)}
       {filters.month.map(m => <Pill key={`m-${m}`} color="#0ea5e9" onX={() => onRemoveMonth(m)}>{MONTHS.find(x => x.value === m)?.name}</Pill>)}
       {filters.severity.map(s => <Pill key={`s-${s}`} color="#f59e0b" onX={() => onRemoveSeverity(s)}>{SEV_OPTIONS.find(x => x.value === s)?.label}</Pill>)}
       {filters.state.map(s => <Pill key={`st-${s}`} color="#34d399" onX={() => onRemoveState(s)}>{s}</Pill>)}
-      <button onClick={onClearAll} style={{ fontSize: 11, color: "#64748b", cursor: "pointer", background: "none", border: "none", textDecoration: "underline", fontFamily: "monospace" }}>Clear all</button>
+      <button onClick={onClearAll} style={{ fontSize: 11, color: "#64748b", cursor: "pointer", background: "none", border: "none", textDecoration: "underline", fontFamily: "monospace" }}>Effacer tout</button>
     </div>
   );
 };

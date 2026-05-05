@@ -16,7 +16,7 @@ export const SeverityChart: React.FC<SeverityChartProps> = ({ data, t }) => {
   return (
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Severity distribution</span>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Répartition de la gravité</span>
       </div>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 20, height: 200, padding: "10px 20px 0", justifyContent: "center" }}>
         {data.map(d => (

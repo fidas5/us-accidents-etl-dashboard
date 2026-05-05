@@ -11,11 +11,11 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import DashboardPage from "./pages/Dashboard";
-import DataExplorerPage from "./pages/DataExplorer";
 import ETLPage from "./pages/ETLJobs";
 import PredictPage from "./pages/Predictions";
-import PredictInfosPage from "./components/ModelInfo";
 
 
 
@@ -68,6 +68,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPageWrapper />} />
       <Route path="/register" element={<RegisterPageWrapper />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/"
         element={
@@ -77,10 +79,8 @@ function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
-        <Route path="data" element={<DataExplorerPage />} />
         <Route path="etl" element={<ETLPage />} />
         <Route path="predict" element={<PredictPage />} />
-        <Route path="predict-infos" element={<PredictInfosPage />} />
       </Route>
     </Routes>
   );

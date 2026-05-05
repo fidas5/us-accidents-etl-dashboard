@@ -76,7 +76,7 @@ export const USMap: React.FC<USMapProps> = ({ cities, t, isDark }) => {
   return (
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Accident hotspots</span>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>zones à risque d’accidents</span>
       </div>
       <div style={{ borderRadius: 12, overflow: "hidden" }}>
         <div ref={containerRef} style={{ width: "100%", height: 400, background: t.mapBg }} />
@@ -89,7 +89,7 @@ export const USMap: React.FC<USMapProps> = ({ cities, t, isDark }) => {
           </span>
         ))}
         <span style={{ color: t.textFaint }}>·</span>
-        <span style={{ color: t.textFaint }}>Circle size = accident count · Color = avg severity</span>
+        <span style={{ color: t.textFaint }}>Taille des cercles = nombre d’accidents · Couleur = gravité moyenne</span>
       </div>
     </div>
   );

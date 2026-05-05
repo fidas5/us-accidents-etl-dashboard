@@ -51,7 +51,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
       setMessage({ text: res.data.message, type: "success" });
       setStep("verify");
     } catch (err: any) {
-      setMessage({ text: err.response?.data?.message || "Registration failed. Please try again.", type: "error" });
+      setMessage({ text: err.response?.data?.message || "L'inscription a échoué. Veuillez réessayer..", type: "error" });
     } finally {
       setLoading(false);
     }
@@ -66,10 +66,10 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
       if (res.data.access_token) {
         onLoggedIn(res.data.access_token, email);
       } else {
-        setMessage({ text: res.data.message || "Verification failed.", type: "error" });
+        setMessage({ text: res.data.message || "La vérification a échoué.", type: "error" });
       }
     } catch (err: any) {
-      setMessage({ text: err.response?.data?.message || "Verification failed. Please try again.", type: "error" });
+      setMessage({ text: err.response?.data?.message || "La vérification a échoué. Veuillez réessayer.", type: "error" });
     } finally {
       setLoading(false);
     }
@@ -359,8 +359,8 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
         {/* ── STEP 1 – Registration form ── */}
         {step === "form" && (
           <>
-            <h1 style={styles.heading}>Create account</h1>
-            <p style={styles.subheading}>join us to access the dashboard</p>
+            <h1 style={styles.heading}>Créer un compte</h1>
+            <p style={styles.subheading}>rejoignez-nous pour accéder au dashboard</p>
 
             <form onSubmit={handleRegister} style={styles.form}>
               {message && (
@@ -425,7 +425,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
               </div>
 
               <div style={styles.fieldGroup}>
-                <label style={styles.fieldLabel}>Password</label>
+                <label style={styles.fieldLabel}>Mot de passe</label>
                 <div style={{ ...styles.inputRow, ...(focusedField === "password" ? styles.inputRowFocused : {}) }}>
                   <Lock size={15} color="var(--text-muted)" />
                   <input
@@ -447,13 +447,13 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
                 disabled={loading}
                 style={{ ...styles.submitBtn, opacity: loading ? 0.7 : 1 }}
               >
-                {loading ? "Creating account…" : "Create account"}
+                {loading ? "Création du compte…" : "Créer un compte"}
               </button>
             </form>
 
             <p style={styles.footerText}>
-              Already have an account?{" "}
-              <Link to="/login" style={styles.footerLink}>Sign in →</Link>
+              Vous avez déjà un compte ?{" "}
+              <Link to="/login" style={styles.footerLink}>Se connecter →</Link>
             </p>
           </>
         )}
@@ -465,8 +465,8 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
               <Phone size={20} color="var(--primary-color)" />
             </div>
 
-            <h1 style={styles.heading}>Check your inbox</h1>
-            <p style={styles.subheading}>verify your email to activate your account</p>
+            <h1 style={styles.heading}>Vérifiez votre boîte de réception</h1>
+            <p style={styles.subheading}>vérifiez votre email pour activer votre compte</p>
 
             <form onSubmit={handleVerify} style={styles.form}>
               {message && (
@@ -479,7 +479,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
               )}
 
               <div style={styles.fieldGroup}>
-                <label style={styles.fieldLabel}>6-digit code</label>
+                <label style={styles.fieldLabel}>Code 6 digits</label>
                 <div style={styles.otpRow}>
                   {codeDigits.map((digit, i) => (
                     <input
@@ -506,7 +506,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
               <div style={styles.noticeChip}>
                 <AlertCircle size={12} color="var(--primary-color)" style={{ flexShrink: 0 }} />
                 <span style={styles.noticeText}>
-                  Code sent to <strong style={{ color: "var(--primary-color)" }}>{email}</strong>
+                  Code envoyé à <strong style={{ color: "var(--primary-color)" }}>{email}</strong>
                 </span>
               </div>
 
@@ -520,17 +520,17 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onLoggedIn }) => {
                   cursor: loading || code.length < 6 ? "not-allowed" : "pointer",
                 }}
               >
-                {loading ? "Verifying…" : "Verify email"}
+                {loading ? "Vérification…" : "Vérifier l'email"}
               </button>
             </form>
 
             <p style={styles.footerText}>
-              Didn't get it?{" "}
+              Je n'ai pas compris?{" "}
               <span
                 style={{ ...styles.footerLink, cursor: "pointer" }}
                 onClick={() => { setStep("form"); setCodeDigits(["","","","","",""]); setMessage(null); }}
               >
-                Resend code →
+                Renvoyer le code →
               </span>
             </p>
           </>

@@ -14,6 +14,8 @@ class User(db.Model):
     created_at        = db.Column(db.DateTime, default=datetime.utcnow)
     nom               = db.Column(db.String(100), nullable=True)
     prenom            = db.Column(db.String(100), nullable=True)
+    reset_code = db.Column(db.String(10), nullable=True)
+    reset_code_expires = db.Column(db.DateTime, nullable=True)
 
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
