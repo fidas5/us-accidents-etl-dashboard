@@ -47,6 +47,28 @@ interface CSVAnalysis {
   valid_dates_found: number;
 }
 
+// Combined upload response type
+interface UploadAnalysisResponse {
+  upload: {
+    status: string;
+    filename: string;
+    size_mb: number;
+    upload_time_seconds: number;
+    saved_path?: string;
+  };
+  analysis: {
+    status: string;
+    available_years?: number[];
+    year_counts?: Record<number, number>;
+    total_rows_scanned?: number;
+    valid_dates_found?: number;
+    analysis_time_seconds?: number;
+    error?: string;
+  };
+  total_time_seconds: number;
+  from_cache?: boolean;
+}
+
 interface JobHistoryItem {
   id: number;
   name: string;
@@ -186,6 +208,7 @@ export default function ETLPage() {
   const [colOk, setColOk] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<JobStatus>("idle");
   const [uploadMsg, setUploadMsg] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Analysis state
   const [csvAnalysis, setCsvAnalysis] = useState<CSVAnalysis | null>(null);
@@ -210,7 +233,6 @@ export default function ETLPage() {
 
   // Dedupe refs
   const analysisDoneRef = useRef(false);
-  const analysisInProgressRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
 
   // ── Reset all jobs ──────────────────────────────────────────────────────────
@@ -248,6 +270,7 @@ export default function ETLPage() {
     setColOk(false);
     setUploadStatus("idle");
     setUploadMsg("");
+    setUploadProgress(0);
     setCsvAnalysis(null);
     analysisDoneRef.current = false;
     setPipelineError(null);
@@ -258,77 +281,93 @@ export default function ETLPage() {
     else setColOk(true);
   };
 
-  // ── Upload ──────────────────────────────────────────────────────────────────
-  const handleUpload = async () => {
-    if (!file || !token || colErrors.length > 0) return;
-    setUploadStatus("loading");
-    setUploadMsg("");
-    setPipelineError(null);
+  // ── Combined Upload & Analyze ───────────────────────────────────────────────
+// In your ETLJobs.tsx - update the handleUploadAndAnalyze function
+const handleUploadAndAnalyze = async () => {
+  if (!file || !token || colErrors.length > 0) return;
+  
+  setUploadStatus("loading");
+  setUploadMsg("");
+  setUploadProgress(0);
+  setPipelineError(null);
+  setIsAnalyzing(true);
 
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await axios.post(`${API}/etl/upload-csv`, form, {
-        headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
-        timeout: 120_000,
-      });
-      setUploadStatus("success");
-      setUploadMsg(res.data.message ?? "Téléchargement réussi");
+  const form = new FormData();
+  form.append("file", file);
+
+  try {
+    const res = await axios.post(`${API}/etl/upload-and-analyze-csv`, form, {
+      headers: { ...authHeaders(), "Content-Type": "multipart/form-data" },
+      timeout: 600000,
+      onUploadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percent);
+        }
+      },
+    });
+
+    const data = res.data;
+    
+    // Check if analysis exists directly in response
+    if (data.available_years) {
+      // Backend returned analysis data directly
+      const analysisData: CSVAnalysis = {
+        available_years: data.available_years,
+        year_counts: data.year_counts || {},
+        total_rows_scanned: data.total_rows_scanned || 0,
+        valid_dates_found: data.valid_dates_found || 0,
+      };
       
-      analysisDoneRef.current = false;
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      await analyzeCSV(true);
+      setCsvAnalysis(analysisData);
+      setUploadStatus("success");
+      setUploadMsg(`Fichier analysé avec succès. ${analysisData.total_rows_scanned.toLocaleString()} lignes trouvées.`);
+      analysisDoneRef.current = true;
+      
+      // Auto-select the most recent year
+      if (analysisData.available_years.length > 0) {
+        const maxYear = Math.max(...analysisData.available_years);
+        setSelectedYear(maxYear);
+      }
+      
       await checkPipelineStatus();
       
-    } catch (err) {
+    } else if (data.analysis && data.analysis.status === "success") {
+      // Backend returned nested structure
+      const analysisData: CSVAnalysis = {
+        available_years: data.analysis.available_years,
+        year_counts: data.analysis.year_counts || {},
+        total_rows_scanned: data.analysis.total_rows_scanned || 0,
+        valid_dates_found: data.analysis.valid_dates_found || 0,
+      };
+      
+      setCsvAnalysis(analysisData);
+      setUploadStatus("success");
+      setUploadMsg(`✅ ${data.upload?.filename || file.name} analysé avec succès`);
+      analysisDoneRef.current = true;
+      
+      if (analysisData.available_years.length > 0) {
+        const maxYear = Math.max(...analysisData.available_years);
+        setSelectedYear(maxYear);
+      }
+      
+      await checkPipelineStatus();
+      
+    } else {
+      // Handle error response
       setUploadStatus("error");
-      const msg = extractErrorMessage(err);
-      setUploadMsg(msg);
+      setUploadMsg(data.message || data.analysis?.error || "Analysis failed");
     }
-  };
-
-  // ── CSV Analysis ────────────────────────────────────────────────────────────
-  const analyzeCSV = useCallback(
-    async (forceRefresh = false) => {
-      if (!token) return;
-      
-      if (!forceRefresh && analysisDoneRef.current && csvAnalysis) return;
-      
-      if (analysisInProgressRef.current) {
-        console.log("Analyse déjà en cours, opération ignorée...");
-        return;
-      }
-
-      analysisInProgressRef.current = true;
-      setIsAnalyzing(true);
-      setPipelineError(null);
-
-      try {
-        const res = await axios.get(`${API}/etl/analyze-csv`, {
-          headers: authHeaders(),
-          timeout: 300_000,
-        });
-        const data: CSVAnalysis = res.data;
-        setCsvAnalysis(data);
-        analysisDoneRef.current = true;
-
-        if (data.available_years?.length > 0) {
-          const maxYear = Math.max(...data.available_years);
-          setSelectedYear(maxYear);
-        }
-      } catch (err) {
-        const msg = extractErrorMessage(err);
-        if (!(err instanceof AxiosError && err.response?.status === 401)) {
-          setPipelineError(`CSV analysis failed: ${msg}`);
-          analysisDoneRef.current = false;
-        }
-      } finally {
-        setIsAnalyzing(false);
-        analysisInProgressRef.current = false;
-      }
-    },
-    [token, csvAnalysis, authHeaders]
-  );
+    
+  } catch (err) {
+    setUploadStatus("error");
+    const msg = extractErrorMessage(err);
+    setUploadMsg(msg);
+    setPipelineError(`Upload failed: ${msg}`);
+  } finally {
+    setIsAnalyzing(false);
+  }
+};
 
   // ── Pipeline Status ─────────────────────────────────────────────────────────
   const checkPipelineStatus = useCallback(async () => {
@@ -352,9 +391,11 @@ export default function ETLPage() {
         return next;
       });
 
-      if (data.csv_exists && !analysisDoneRef.current && !analysisInProgressRef.current) {
+      if (data.csv_exists && !analysisDoneRef.current && !isAnalyzing) {
+        // If CSV exists but no analysis, try to get analysis from cache
         setTimeout(() => {
-          analyzeCSV(false);
+          // You might want to call a separate analyze endpoint here
+          // or just rely on the analysis from upload
         }, 500);
         setUploadStatus("success");
       }
@@ -365,7 +406,7 @@ export default function ETLPage() {
     } finally {
       setCheckingStatus(false);
     }
-  }, [token, authHeaders, analyzeCSV]);
+  }, [token, authHeaders, isAnalyzing]);
 
   // ── Job History ─────────────────────────────────────────────────────────────
   const fetchJobHistory = useCallback(async () => {
@@ -410,12 +451,10 @@ export default function ETLPage() {
       payload.year = selectedYear;
     }
 
-    const timeout = 0;
-
     try {
       const res = await axios.post(`${API}${job.endpoint}`, payload, {
         headers: authHeaders(),
-        timeout,
+        timeout: 0,
       });
       setJobStatus((s) => ({ ...s, [job.id]: "success" }));
       setJobResult((r) => ({ ...r, [job.id]: res.data }));
@@ -460,12 +499,10 @@ export default function ETLPage() {
         const payload: Record<string, unknown> = {};
         if (stepId === "load-raw") payload.year = selectedYear;
 
-        const timeout = 0;
-
         try {
           const res = await axios.post(`${API}${job.endpoint}`, payload, {
             headers: authHeaders(),
-            timeout,
+            timeout: 0,
           });
           setJobStatus((s) => ({ ...s, [stepId]: "success" }));
           setJobResult((r) => ({ ...r, [stepId]: res.data }));
@@ -668,6 +705,18 @@ export default function ETLPage() {
         .etl-upload-label { font-size: 12px; color: var(--text-muted); }
         .etl-file-name    { font-size: 11px; font-family: monospace; color: var(--text-main); margin-top: 4px; }
 
+        .etl-progress-bar {
+          width: 100%; height: 4px; background: rgba(59,130,246,.2);
+          border-radius: 2px; overflow: hidden; margin: 8px 0;
+        }
+        .etl-progress-fill {
+          height: 100%; background: linear-gradient(90deg, #3b82f6, #6366f1);
+          transition: width .3s ease;
+        }
+        .etl-progress-text {
+          font-size: 11px; color: var(--text-muted); text-align: center;
+        }
+
         .etl-col-errors {
           padding: 8px 12px; border-radius: 6px; margin-bottom: 10px;
           background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.2);
@@ -733,20 +782,6 @@ export default function ETLPage() {
         }
         .etl-year-btn.active { background: #3b82f6; color: white; border-color: #3b82f6; }
         .etl-year-btn:hover:not(.active) { border-color: #3b82f6; color: #93c5fd; }
-        .etl-year-refresh-btn {
-          margin-left: auto;
-          background: transparent;
-          border: 1px solid var(--border);
-          border-radius: 4px;
-          padding: 4px 8px;
-          cursor: pointer;
-          font-size: 10px;
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          transition: all .15s;
-        }
-        .etl-year-refresh-btn:hover { border-color: #3b82f6; color: #93c5fd; }
 
         /* ── Job rows ─────────────────────────────────────────────── */
         .etl-jobs-list { display: flex; flex-direction: column; gap: 10px; }
@@ -855,29 +890,6 @@ export default function ETLPage() {
         }
         .etl-history-empty { text-align: center; padding: 24px; color: var(--text-muted); font-size: 12px; }
 
-        /* ── Analyzing indicator ──────────────────────────────────── */
-        .etl-analyzing {
-          display: flex; align-items: center; gap: 8px;
-          padding: 10px 12px; margin-top: 12px; border-radius: 8px;
-          background: rgba(59,130,246,.06); border: 1px solid rgba(59,130,246,.2);
-          font-size: 12px; color: #93c5fd;
-        }
-        .etl-analyzing button {
-          margin-left: auto;
-          background: transparent;
-          border: 1px solid rgba(59,130,246,.3);
-          border-radius: 4px;
-          padding: 4px 8px;
-          cursor: pointer;
-          font-size: 11px;
-          transition: all .15s;
-        }
-        .etl-analyzing button:hover {
-          border-color: #3b82f6;
-          color: white;
-          background: rgba(59,130,246,.2);
-        }
-
         /* ── Spinner ──────────────────────────────────────────────── */
         @keyframes etl-spin { to { transform: rotate(360deg); } }
         .etl-spin { animation: etl-spin 1s linear infinite; }
@@ -891,8 +903,8 @@ export default function ETLPage() {
 
       <div className="etl-page">
         <div className="etl-header">
-          <h1 className="etl-title">Pipeline ETL </h1>
-<p className="etl-sub">Importer le dataset → analyser → sélectionner l’année → exécuter le pipeline</p>
+          <h1 className="etl-title">Pipeline ETL</h1>
+          <p className="etl-sub">Importer le dataset → analyser → sélectionner l'année → exécuter le pipeline</p>
         </div>
 
         {pipelineError && (
@@ -934,7 +946,7 @@ export default function ETLPage() {
         <div className="etl-grid">
           {/* Upload card */}
           <div className="etl-card">
-            <div className="etl-card-title">Étape 1 — Importer le CSV</div>
+            <div className="etl-card-title">Étape 1 — Importer et analyser le CSV</div>
             <div className="etl-card-desc">Jeu de données des accidents routiers aux États-Unis (toute période)</div>
 
             <div
@@ -942,7 +954,7 @@ export default function ETLPage() {
               onClick={() => fileRef.current?.click()}
             >
               <Upload size={22} color={colErrors.length > 0 ? "#f87171" : colOk ? "#4ade80" : "#3b82f6"} />
-              <span className="etl-upload-label">Cliquez pour parcourir ou glissez-déposez</span>
+              <span className="etl-upload-label">Cliquez pour parcourir</span>
               <span className="etl-upload-label" style={{ fontSize: 10 }}>fichiers .csv seulement</span>
               {file && <div className="etl-file-name">{file.name}</div>}
             </div>
@@ -954,12 +966,27 @@ export default function ETLPage() {
               </div>
             )}
 
+            {uploadStatus === "loading" && (
+              <div>
+                <div className="etl-progress-bar">
+                  <div className="etl-progress-fill" style={{ width: `${uploadProgress}%` }} />
+                </div>
+                <div className="etl-progress-text">{uploadProgress}% téléchargé</div>
+              </div>
+            )}
+
             <button
               className="etl-btn"
               disabled={!file || uploadStatus === "loading" || uploadStatus === "success" || colErrors.length > 0}
-              onClick={handleUpload}
+              onClick={handleUploadAndAnalyze}
             >
-              {uploadStatus === "loading" ? <><Loader size={13} className="etl-spin" /> Chargement..</> : uploadStatus === "success" ? <><CheckCircle2 size={13} /> Uploaded</> : <><Upload size={13} /> Upload File</>}
+              {uploadStatus === "loading" ? (
+                <><Loader size={13} className="etl-spin" /> Téléchargement et analyse…</>
+              ) : uploadStatus === "success" ? (
+                <><CheckCircle2 size={13} /> Importé et analysé</>
+              ) : (
+                <><Upload size={13} /> Importer et analyser</>
+              )}
             </button>
 
             {uploadMsg && (
@@ -969,29 +996,11 @@ export default function ETLPage() {
               </div>
             )}
 
-            {isAnalyzing && (
-              <div className="etl-analyzing">
-                <Loader size={13} className="etl-spin" />
-                Analyse du CSV pour la distribution annuelle…
-              </div>
-            )}
-
-            {uploadStatus === "success" && !csvAnalysis && !isAnalyzing && (
-              <div className="etl-analyzing" style={{ marginTop: '12px' }}>
-                <AlertCircle size={13} />
-                CSV importé, mais l’analyse n’est pas disponible.
-                <button onClick={() => analyzeCSV(true)}>Réessayer l’analyse</button>
-              </div>
-            )}
-
             {csvAnalysis && !isAnalyzing && (
               <div className="etl-year-sel">
                 <div className="etl-year-hd">
                   <BarChart3 size={13} />
                   Résumé des données &amp; Filtre par année
-                  <button className="etl-year-refresh-btn" onClick={() => analyzeCSV(true)}>
-                    <RefreshCw size={10} /> Actualiser
-                  </button>
                 </div>
                 <div className="etl-year-stats">
                   <div className="etl-year-stat">
@@ -1019,8 +1028,8 @@ export default function ETLPage() {
 
           {/* Pipeline card */}
           <div className="etl-card">
-           <div className="etl-card-title">Étape 2 — Exécuter le pipeline</div>
-<div className="etl-card-desc">Exécuter les tâches ETL de manière séquentielle</div>
+            <div className="etl-card-title">Étape 2 — Exécuter le pipeline</div>
+            <div className="etl-card-desc">Exécuter les tâches ETL de manière séquentielle</div>
 
             <div className="etl-jobs-list">
               {JOBS.map((job, idx) => {
@@ -1069,9 +1078,7 @@ export default function ETLPage() {
               })}
             </div>
 
-            <button className="etl-reset-btn" onClick={resetAllJobs}>
-              <RotateCcw size={13} /> Réinitialiser toutes les tâches
-            </button>
+           
           </div>
         </div>
 
@@ -1177,7 +1184,6 @@ function PipelineStatusPanel({ status, checking, resuming, uploadDone, onRefresh
           {resuming ? <><Loader size={13} className="etl-spin" /> Reprise du pipeline…</> : <><PlayCircle size={13} /> Reprendre le pipeline — corriger les étapes incomplètes</>}
         </button>
       )}
-     
     </div>
   );
 }

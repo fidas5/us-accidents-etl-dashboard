@@ -2,7 +2,28 @@
 import React from "react";
 import type { HourCell } from "../../pages/types/dashboard.types";
 import type { T } from "../../pages/themes/dashboard.themes";
-import { DAY_LABELS } from "../../pages/constants/dashboard.constants";
+
+// French day labels
+const DAY_LABELS_FR: Record<number, string> = {
+  0: "Lun",  // Monday
+  1: "Mar",  // Tuesday
+  2: "Mer",  // Wednesday
+  3: "Jeu",  // Thursday
+  4: "Ven",  // Friday
+  5: "Sam",  // Saturday
+  6: "Dim"   // Sunday
+};
+
+// Full French day names (alternative)
+const DAY_LABELS_FULL_FR: Record<number, string> = {
+  0: "Lundi",
+  1: "Mardi", 
+  2: "Mercredi",
+  3: "Jeudi",
+  4: "Vendredi",
+  5: "Samedi",
+  6: "Dimanche"
+};
 
 interface HourHeatmapProps {
   grid: HourCell[];
@@ -29,31 +50,46 @@ export const HourHeatmap: React.FC<HourHeatmapProps> = ({ grid, t }) => {
     return "#f43f5e";
   };
 
+  // Get French tooltip text
+  const getTooltipText = (cell: HourCell | undefined, dow: number, hour: number) => {
+    if (!cell) return "Aucune donnée";
+    return `${DAY_LABELS_FULL_FR[dow]} ${hour}:00 — ${fmt(cell.count)} accidents (${cell.intensity}% d'intensité)`;
+  };
+
   return (
     <div style={{ background: t.cardBg, border: `1px solid ${t.border}`, borderRadius: 14, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>Carte de chaleur des heures de pointe</span>
+        <span style={{ fontFamily: "'Syne',sans-serif", fontSize: 15, fontWeight: 700, color: t.textStrong }}>
+          Carte de chaleur des heures de pointe
+        </span>
       </div>
       <div style={{ overflowX: "auto" }}>
         <div style={{ display: "inline-grid", gridTemplateColumns: `52px repeat(24, ${cellSize}px)`, gap: 2, minWidth: "fit-content" }}>
           <div />
           {hours.map(h => (
             <div key={h} style={{ fontSize: 9, color: t.textFaint, textAlign: "center", paddingBottom: 4, fontFamily: "monospace" }}>
-              {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
+              {h === 0 ? "0h" : h < 12 ? `${h}h` : h === 12 ? "12h" : `${h - 12}h`}
             </div>
           ))}
           {days.map(dow => (
             <React.Fragment key={dow}>
               <div style={{ fontSize: 10, color: t.textMuted, display: "flex", alignItems: "center", paddingRight: 8, fontFamily: "monospace" }}>
-                {DAY_LABELS[dow]}
+                {DAY_LABELS_FR[dow]}
               </div>
               {hours.map(h => {
                 const cell = map[dow]?.[h];
                 const intensity = cell?.intensity ?? 0;
                 return (
                   <div key={h}
-                    title={cell ? `${DAY_LABELS[dow]} ${h}:00 — ${fmt(cell.count)} accidents (${intensity}% intensity)` : "No data"}
-                    style={{ width: cellSize, height: cellSize, borderRadius: 3, background: cellColor(intensity), cursor: cell ? "pointer" : "default", transition: "opacity .15s" }}
+                    title={getTooltipText(cell, dow, h)}
+                    style={{ 
+                      width: cellSize, 
+                      height: cellSize, 
+                      borderRadius: 3, 
+                      background: cellColor(intensity), 
+                      cursor: cell ? "pointer" : "default", 
+                      transition: "opacity .15s" 
+                    }}
                   />
                 );
               })}

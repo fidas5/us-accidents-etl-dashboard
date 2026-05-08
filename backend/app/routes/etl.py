@@ -58,26 +58,32 @@ def _f_to_c(f_val: float | None) -> float | None:
 def _mi_to_km(mi: float | None) -> float | None:
     return None if mi is None else round(mi * 1.60934, 2)
 
-
 def _season(month: int) -> str:
+    """Convert month to French season"""
     return {
-        12: "Winter", 1: "Winter", 2: "Winter",
-        3: "Spring", 4: "Spring", 5: "Spring",
-        6: "Summer", 7: "Summer", 8: "Summer",
-        9: "Fall", 10: "Fall", 11: "Fall",
-    }.get(month, "Unknown")
+        12: "Hiver", 1: "Hiver", 2: "Hiver",
+        3: "Printemps", 4: "Printemps", 5: "Printemps",
+        6: "Été", 7: "Été", 8: "Été",
+        9: "Automne", 10: "Automne", 11: "Automne",
+    }.get(month, "Inconnu")
 
 
 def _time_of_day(hour: int) -> str:
-    if 5 <= hour < 12: return "Morning"
-    if 12 <= hour < 17: return "Afternoon"
-    if 17 <= hour < 21: return "Evening"
-    return "Night"
+    """Convert hour to French time of day"""
+    if 5 <= hour < 12: return "Matin"
+    if 12 <= hour < 17: return "Après-midi"
+    if 17 <= hour < 21: return "Soir"
+    return "Nuit"
 
 
 def _severity_label(sev: int) -> str:
-    return {1: "Low", 2: "Moderate", 3: "High", 4: "Critical"}.get(sev, "Unknown")
-
+    """Convert severity to French label"""
+    return {
+        1: "Faible", 
+        2: "Modérée", 
+        3: "Élevée", 
+        4: "Critique"
+    }.get(sev, "Inconnu")
 
 def _parse_dt(raw: str) -> datetime | None:
     if not raw or str(raw).strip() in ("NaT", "None", "nan", ""):
@@ -164,86 +170,75 @@ def _finish_etl_job(
         print(f"[ETL] Warning: could not update job row: {exc}")
 
 
-# ── Step 0 — Analyze CSV ───────────────────────────────────────────────────────
-
-@etl_bp.route("/analyze-csv", methods=["GET"])
+@etl_bp.route("/upload-and-analyze-csv", methods=["POST"])
 @jwt_required()
-def analyze_csv():
-    path = _csv_path()
-
-    if not os.path.exists(path):
-        return jsonify({"message": "CSV file not found. Please upload it first.", "csv_path": path}), 404
-
-    cached = _get_cached_analysis(path)
-    if cached:
-        return jsonify({**cached, "from_cache": True}), 200
-
+def upload_and_analyze_csv():
+    """
+    Upload CSV file and analyze it in one request
+    Returns year distribution directly (no nested structure)
+    """
+    start_time = time.time()
+    
     try:
+        # ── Step 1: Validate file ─────────────────────────────────────────────
+        if "file" not in request.files:
+            return jsonify({"error": "No file field in request."}), 400
+
+        f = request.files["file"]
+
+        if not f.filename:
+            return jsonify({"error": "No file selected."}), 400
+
+        if not f.filename.lower().endswith(".csv"):
+            return jsonify({"error": "Only .csv files are accepted."}), 415
+
+        # ── Step 2: Stream and analyze without saving ─────────────────────────
         years_count: dict[int, int] = {}
         total_rows = 0
         valid_rows = 0
-
-        for chunk in pd.read_csv(path, usecols=["Start_Time"], chunksize=50_000, on_bad_lines="skip"):
+        
+        # Read the stream directly
+        import io
+        stream = io.TextIOWrapper(f.stream, encoding='utf-8')
+        
+        # Process in chunks
+        chunk_size = 50000
+        for chunk in pd.read_csv(stream, chunksize=chunk_size, on_bad_lines="skip"):
+            if "Start_Time" not in chunk.columns:
+                return jsonify({"error": "CSV missing 'Start_Time' column"}), 400
+            
             total_rows += len(chunk)
             parsed = pd.to_datetime(chunk["Start_Time"], errors="coerce")
             years = parsed.dt.year.dropna().astype(int)
             valid_rows += len(years)
+            
             for y in years:
                 years_count[int(y)] = years_count.get(int(y), 0) + 1
 
         if not years_count:
-            return jsonify({"message": "No valid dates found in the Start_Time column."}), 422
+            return jsonify({
+                "error": "No valid dates found in the Start_Time column.",
+                "total_rows_scanned": total_rows
+            }), 422
 
-        result = {
+        # ── Step 3: Return simple, flat response ──────────────────────────────
+        analysis_time = time.time() - start_time
+        
+        return jsonify({
             "available_years": sorted(years_count.keys()),
             "year_counts": {str(k): v for k, v in sorted(years_count.items())},
             "total_rows_scanned": total_rows,
             "valid_dates_found": valid_rows,
-            "from_cache": False,
-        }
-        _set_cached_analysis(path, result)
-        return jsonify(result), 200
-
-    except pd.errors.ParserError as exc:
-        return jsonify({"message": "CSV parsing error.", "detail": str(exc)}), 422
+            "analysis_time_seconds": round(analysis_time, 2),
+            "filename": f.filename,
+            "size_mb": round(f.content_length / 1_048_576, 2) if f.content_length else 0
+        }), 200
+        
     except MemoryError:
-        return jsonify({"message": "Server ran out of memory while scanning CSV."}), 500
-    except Exception as exc:
+        return jsonify({"error": "Server ran out of memory while processing."}), 500
+    except Exception as e:
         traceback.print_exc()
-        return jsonify({"message": "Unexpected error during CSV analysis.", "detail": str(exc)}), 500
-
-
-# ── Step 0.5 — Upload CSV ─────────────────────────────────────────────────────
-
-@etl_bp.route("/upload-csv", methods=["POST"])
-@jwt_required()
-def upload_csv():
-    if "file" not in request.files:
-        return jsonify({"message": "No file field in request."}), 400
-
-    f = request.files["file"]
-
-    if not f.filename:
-        return jsonify({"message": "No file selected."}), 400
-
-    if not f.filename.lower().endswith(".csv"):
-        return jsonify({"message": "Only .csv files are accepted."}), 415
-
-    save_path = _csv_path()
-
-    try:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        f.save(save_path)
-    except OSError as exc:
-        return jsonify({"message": "Could not save file to disk.", "detail": str(exc)}), 500
-
-    if not os.path.exists(save_path):
-        return jsonify({"message": "File was not saved correctly."}), 500
-
-    _invalidate_cache()
-
-    size_mb = os.path.getsize(save_path) / 1_048_576
-    return jsonify({"message": f"{f.filename} uploaded successfully ({size_mb:.1f} MB).", "size_mb": round(size_mb, 2)}), 200
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 
 # ── Step 1 — Load Raw (INCREMENTAL) ────────────────────────────────────────────
@@ -386,7 +381,7 @@ def build_clean():
         if raw_count == 0:
             raise ValueError("No raw data found — run /etl/load-raw first.")
 
-        # Charger les IDs existants dans clean
+        # Load existing clean IDs (for deduplication)
         print("[build-clean] Loading existing clean accident IDs...")
         existing_clean_ids = set()
         result = db.session.execute(text("SELECT accident_id FROM accidents_clean"))
@@ -396,23 +391,42 @@ def build_clean():
 
         print("[build-clean] Starting incremental load...")
 
-        offset = 0
+        # FIX 1: Use cursor-based pagination instead of offset
+        # This is more reliable for large datasets
+        last_id = None
         clean_batch = []
         seen_in_run = set()
-
+        
+        # FIX 2: Add ORDER BY for consistent ordering
+        query = db.session.query(AccidentRaw).order_by(AccidentRaw.accident_id)
+        
+        # FIX 3: Use keyset pagination (more reliable than offset)
+        batch_count = 0
         while True:
-            batch = db.session.query(AccidentRaw).offset(offset).limit(DB_BATCH).all()
+            if last_id:
+                batch = query.filter(AccidentRaw.accident_id > last_id).limit(DB_BATCH).all()
+            else:
+                batch = query.limit(DB_BATCH).all()
+            
             if not batch:
                 break
+                
+            batch_count += 1
+            print(f"[build-clean] Processing batch {batch_count}: {len(batch)} rows (last_id: {last_id})")
+            
+            # Update last_id for next batch
+            last_id = batch[-1].accident_id if batch else None
 
-            new_rows = [row for row in batch if row.accident_id not in existing_clean_ids and row.accident_id not in seen_in_run]
+            # Filter out existing records
+            new_rows = [row for row in batch 
+                       if row.accident_id not in existing_clean_ids 
+                       and row.accident_id not in seen_in_run]
+            
+            if new_rows:
+                print(f"[build-clean]   New rows in batch: {len(new_rows)}")
+
             for row in new_rows:
                 seen_in_run.add(row.accident_id)
-
-            if new_rows:
-                print(f"[build-clean] Batch at offset {offset}: {len(batch)} read, {len(new_rows)} new")
-
-            for row in new_rows:
                 rows_processed += 1
 
                 start_dt = _parse_dt(row.start_time_raw)
@@ -448,17 +462,24 @@ def build_clean():
                     db.session.bulk_save_objects(clean_batch)
                     db.session.commit()
                     rows_inserted += len(clean_batch)
+                    print(f"[build-clean]   Inserted batch: {len(clean_batch)} rows (total: {rows_inserted:,})")
                     clean_batch = []
 
+            # Commit any remaining rows
             if clean_batch:
                 db.session.bulk_save_objects(clean_batch)
                 db.session.commit()
                 rows_inserted += len(clean_batch)
+                print(f"[build-clean]   Final insert: {len(clean_batch)} rows (total: {rows_inserted:,})")
                 clean_batch = []
 
-            offset += DB_BATCH
+        print(f"[build-clean] Processing complete!")
+        print(f"[build-clean]   Total batches: {batch_count}")
+        print(f"[build-clean]   Processed: {rows_processed:,}")
+        print(f"[build-clean]   Inserted: {rows_inserted:,}")
+        print(f"[build-clean]   Skipped: {rows_skipped:,}")
 
-        # Ajouter contrainte UNIQUE
+        # Add UNIQUE constraint
         try:
             db.session.execute(text("ALTER TABLE accidents_clean ADD CONSTRAINT unique_accident_id_clean UNIQUE (accident_id)"))
             db.session.commit()
@@ -469,7 +490,7 @@ def build_clean():
 
         status = "success"
         elapsed = time.time() - t0
-        print(f"[build-clean] ✅ Completed in {elapsed:.2f}s - Inserted: {rows_inserted:,}")
+        print(f"[build-clean] ✅ Completed in {elapsed:.2f}s")
 
         return jsonify({
             "message": "Clean data built successfully.",
@@ -486,9 +507,9 @@ def build_clean():
         return jsonify({"message": "Unexpected error during build-clean.", "detail": error_msg}), 500
     finally:
         JobManager.unregister(etl_job.id)
-        _finish_etl_job(etl_job, status=status, rows_processed=rows_processed, rows_inserted=rows_inserted, rows_skipped=rows_skipped, error_message=error_msg, duration_seconds=time.time() - t0)
-
-
+        _finish_etl_job(etl_job, status=status, rows_processed=rows_processed, 
+                       rows_inserted=rows_inserted, rows_skipped=rows_skipped, 
+                       error_message=error_msg, duration_seconds=time.time() - t0)
 # ── Pipeline Status ────────────────────────────────────────────────────────────
 
 @etl_bp.route("/pipeline-status", methods=["GET"])

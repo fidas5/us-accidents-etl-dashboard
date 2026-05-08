@@ -68,7 +68,19 @@ class AccidentRaw(db.Model):
     weather_condition_raw = db.Column(db.String(100))
     latitude_raw          = db.Column(db.Float)
     longitude_raw         = db.Column(db.Float)
-
+amenity = db.Column(db.Boolean)
+bump = db.Column(db.Boolean)
+crossing = db.Column(db.Boolean)
+give_way = db.Column(db.Boolean)
+junction = db.Column(db.Boolean)
+no_exit = db.Column(db.Boolean)
+railway = db.Column(db.Boolean)
+roundabout = db.Column(db.Boolean)
+station = db.Column(db.Boolean)
+stop = db.Column(db.Boolean)
+traffic_calming = db.Column(db.Boolean)
+traffic_signal = db.Column(db.Boolean)
+turning_loop = db.Column(db.Boolean)
 
 class AccidentClean(db.Model):
     """
@@ -121,6 +133,7 @@ class DimTime(db.Model):
 
     # Calendar attributes
     year        = db.Column(db.Integer,  nullable=False)
+    
     month       = db.Column(db.Integer,  nullable=False)   # 1–12
     day         = db.Column(db.Integer,  nullable=False)   # 1–31
     hour        = db.Column(db.Integer,  nullable=False)   # 0–23

@@ -355,7 +355,7 @@ const ForgotPasswordPage: React.FC = () => {
                   opacity: loading ? 0.7 : 1,
                 }}
               >
-                {loading ? "Sending..." : "Send reset code"}
+                {loading ? "Envoi..." : "Envoyer le code de réinitialisation"}
                 {!loading && <ArrowRight size={16} />}
               </button>
             </form>

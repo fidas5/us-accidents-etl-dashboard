@@ -1,0 +1,317 @@
+/* RegisterPage.css */
+
+.register-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--bg-app);
+  position: relative;
+  overflow: hidden;
+  font-family: 'Syne', system-ui, sans-serif;
+}
+
+.register-glow-top {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  top: -200px;
+  left: -100px;
+  pointer-events: none;
+}
+
+.register-glow-top.dark {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.14), transparent 70%);
+}
+
+.register-glow-top.light {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.06), transparent 70%);
+}
+
+.register-glow-bottom {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  bottom: -150px;
+  right: -80px;
+  pointer-events: none;
+}
+
+.register-glow-bottom.dark {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.12), transparent 70%);
+}
+
+.register-glow-bottom.light {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.05), transparent 70%);
+}
+
+.register-card {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px 28px 28px;
+  overflow: hidden;
+}
+
+.register-card.dark {
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5);
+}
+
+.register-card.light {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+}
+
+.register-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+}
+
+.register-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.register-brand-icon {
+  width: 34px;
+  height: 34px;
+  background: var(--primary-color);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.register-brand-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.register-step-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.register-step-pill {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+  transition: background 0.3s;
+}
+
+.register-step-pill-active {
+  background: var(--primary-color);
+}
+
+.register-verify-icon-wrap {
+  width: 48px;
+  height: 48px;
+  background: var(--primary-color-soft);
+  border: 1px solid var(--primary-color-soft);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.register-heading {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.5px;
+  margin: 0 0 4px;
+}
+
+.register-subheading {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.03em;
+  margin: 0 0 24px;
+}
+
+.register-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.register-alert {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.register-alert-success {
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: var(--success);
+}
+
+.register-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.register-field-group {
+  margin-bottom: 16px;
+}
+
+.register-half-field-group {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.register-field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+  font-family: 'DM Mono', monospace;
+}
+
+.register-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 0 14px;
+  transition: all 0.2s;
+}
+
+.register-input-row-focused {
+  border-color: var(--primary-color);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--primary-color-soft);
+}
+
+.register-input {
+  flex: 1;
+  height: 44px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
+}
+
+.register-otp-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.register-otp-box {
+  flex: 1;
+  height: 48px;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  color: var(--text-muted);
+  outline: none;
+  transition: all 0.2s;
+}
+
+.register-otp-box-filled {
+  color: var(--primary-color);
+  border-color: var(--primary-color-soft);
+}
+
+.register-otp-box-active {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-color-soft);
+  background: var(--surface);
+}
+
+.register-notice-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 4px;
+}
+
+.register-notice-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+  letter-spacing: 0.02em;
+}
+
+.register-submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 46px;
+  margin-top: 8px;
+  background: var(--primary-color);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Syne', sans-serif;
+  letter-spacing: 0.02em;
+  transition: opacity 0.2s;
+  cursor: pointer;
+}
+
+.register-submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.register-footer-text {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'DM Mono', monospace;
+  margin: 20px 0 0;
+}
+
+.register-footer-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  cursor: pointer;
+}

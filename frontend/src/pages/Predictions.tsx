@@ -629,11 +629,9 @@ export default function Predictions() {
             color: t.textStrong, 
             margin: "0 0 8px" 
           }}>
-            🔮 Prédiction de sévérité
+            Prédiction de sévérité
           </h1>
-          <p style={{ color: t.textMuted, fontSize: "13px", fontFamily: "'IBM Plex Mono', monospace" }}>
-            Random Forest 
-          </p>
+         
         </header>
         <PredictorContent t={t} />
       </div>

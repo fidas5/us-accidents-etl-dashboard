@@ -77,23 +77,6 @@ export const OverviewStrip: React.FC<OverviewStripProps> = ({ overview, sevData,
         </div>
       </div>
 
-      <div style={kpiStyle}>
-        <div style={{ fontSize: 22, color: t.textFaint, marginTop: 2 }}>▦</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".07em", color: t.textMuted, marginBottom: 12 }}>Analyse de la gravité</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {sevData.map(r => (
-              <div key={r.severity} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 10, minWidth: 52, color: SEV_COLORS[r.label] }}>{r.label}</span>
-                <div style={{ flex: 1, height: 3, borderRadius: 2, background: t.miniTrack, overflow: "hidden" }}>
-                  <div style={{ height: "100%", borderRadius: 2, background: SEV_COLORS[r.label], width: `${(r.count / sevMax) * 100}%` }} />
-                </div>
-                <span style={{ fontSize: 10, color: t.textMuted, minWidth: 32, textAlign: "right" }}>{r.pct}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
