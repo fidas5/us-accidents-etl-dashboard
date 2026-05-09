@@ -6,3 +6,22 @@ node_modules/
 *.csv
 backend/app/ml/rf_model.pkl
 backend/app/ml/*.pkl
+
+
+
+# ML models
+backend/app/ml/*.json
+backend/ml/*.pkl
+
+# datasets
+backend/data/*.csv
+*.parquet
+
+# Python cache
+__pycache__/
+*.pyc
+
+# frontend
+node_modules/
+dist/
+build/

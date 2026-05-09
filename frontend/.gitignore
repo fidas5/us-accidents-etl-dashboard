@@ -22,3 +22,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# ML models
+backend/app/ml/*.json
+backend/ml/*.pkl
+
+# datasets
+*.csv
+*.parquet
+
+# frontend
+node_modules/
+dist/
+build/
+
+# python
+venv/
+__pycache__/

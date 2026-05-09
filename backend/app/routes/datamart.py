@@ -10,10 +10,10 @@ from datetime import datetime
 from typing import Optional
 
 import pandas as pd
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify,request
 from flask_jwt_extended import jwt_required
 from sqlalchemy import text
-
+from flask_jwt_extended import create_access_token
 from .. import db
 from ..models import AccidentClean, AccidentRaw, ETLJob
 from ..models import DimTime, DimLocation, DimWeather, DimRoad, FactAccident
@@ -133,6 +133,26 @@ def _finish_etl_job(
         db.session.rollback()
         print(f"[datamart] Warning: could not update job row: {exc}")
 
+
+@datamart_bp.route("/years-distribution", methods=["GET"])
+@jwt_required()
+def years_distribution():
+    """Retourne la distribution des années dans fact_accident"""
+    try:
+        result = db.session.execute(text("""
+            SELECT 
+                EXTRACT(YEAR FROM start_time)::INTEGER as year,
+                COUNT(*) as count
+            FROM fact_accident
+            GROUP BY EXTRACT(YEAR FROM start_time)
+            ORDER BY year DESC
+        """))
+        
+        years = [{"year": row[0], "count": row[1]} for row in result]
+        
+        return jsonify({"years": years}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ── Step 3 — Build Datamart (INCREMENTAL - NO CSV) ─────────────────────────────
 @datamart_bp.route("/build-datamart", methods=["POST"])
@@ -453,292 +473,32 @@ def build_datamart():
         )
 
         
-@datamart_bp.route("/build-datamarff", methods=["POST"])
+
+@datamart_bp.route("/delete-year", methods=["POST"])
 @jwt_required()
-def build_datamartt():
-    t0 = time.time()
-    etl_job = _create_etl_job("build-datamart")
-    job_name = "build-datamart"
-
-    total_new_facts = 0
-    total_skipped = 0
-    new_dim_time = 0
-    new_dim_location = 0
-    new_dim_weather = 0
-    new_dim_road = 0
-    error_msg = None
-    status = "failed"
-
-    print(f"[{job_name}] ========== INCREMENTAL DATAMART BUILD (NO CSV) ==========")
-
-    try:
-        JobManager.register(etl_job.id, job_name)
-
-        # =========================================================
-        # 1. RÉCUPÉRER LES IDS DÉJÀ DANS LE DATAMART
-        # =========================================================
-        print(f"[{job_name}] Loading existing accident IDs...")
-        existing_fact_ids = {
-            row[0] for row in db.session.execute(text("SELECT accident_id FROM fact_accident"))
-        }
-        print(f"[{job_name}] {len(existing_fact_ids):,} already in datamart")
-
-        # =========================================================
-        # 2. TROUVER LES NOUVEAUX ACCIDENTS
-        # =========================================================
-        print(f"[{job_name}] Finding new accidents...")
-        new_accidents = db.session.query(AccidentClean).filter(
-            ~AccidentClean.accident_id.in_(existing_fact_ids)
-        ).all()
-
-        print(f"[{job_name}] {len(new_accidents):,} NEW accidents to process")
-
-        if not new_accidents:
-            print(f"[{job_name}] Datamart is already up to date!")
-            return jsonify({"message": "Datamart is already up to date.", "rows_inserted": 0}), 200
-
-        # =========================================================
-        # 3. CHARGER LES CACHES DES DIMENSIONS EXISTANTES
-        # =========================================================
-        print(f"[{job_name}] Loading dimension caches...")
-
-        time_cache = {
-            (d.year, d.month, d.day, d.hour): d.time_id
-            for d in db.session.query(DimTime).all()
-        }
-
-        location_cache = {
-            ((d.city or "").strip().lower(),
-             (d.state or "").strip().upper(),
-             round(d.latitude or 0.0, 6),
-             round(d.longitude or 0.0, 6)): d.location_id
-            for d in db.session.query(DimLocation).all()
-        }
-
-        weather_cache = {
-            ((d.weather_condition or "Inconnu").strip().lower(),
-             round(d.temperature_c or 0.0, 1),
-             round(d.visibility_km or 0.0, 1)): d.weather_id
-            for d in db.session.query(DimWeather).all()
-        }
-
-        road_cache = {
-            (d.amenity, d.bump, d.crossing, d.give_way, d.junction,
-             d.no_exit, d.railway, d.roundabout, d.station, d.stop,
-             d.traffic_calming, d.traffic_signal, d.turning_loop): d.road_id
-            for d in db.session.query(DimRoad).all()
-        }
-
-        print(f"[{job_name}] Caches ready: time={len(time_cache)}, loc={len(location_cache)}, weather={len(weather_cache)}, road={len(road_cache)}")
-
-        # =========================================================
-        # 4. CHARGER LES ROAD FLAGS DEPUIS LA DB (NO CSV)
-        # =========================================================
-        print(f"[{job_name}] Loading road flags from database...")
+def delete_year():
+    """⚠️ Supprime TOUTES les données d'une année (raw + clean + datamart)"""
+    data = request.get_json()
+    year = data.get("year")
+    
+    if not year:
+        return jsonify({"message": "Year required"}), 400
+    
+    # 1. Supprimer du datamart
+    db.session.execute(text("DELETE FROM fact_accident WHERE EXTRACT(YEAR FROM start_time) = :year"), {"year": year})
+    
+    # 2. Supprimer de accidents_clean
+    db.session.execute(text("DELETE FROM accidents_clean WHERE EXTRACT(YEAR FROM start_time) = :year"), {"year": year})
+    
+    # 3. Supprimer de accidents_raw
+    db.session.execute(text("DELETE FROM accidents_raw WHERE EXTRACT(YEAR FROM start_time_raw::timestamp) = :year"), {"year": year})
+    
+    # 4. Nettoyer les dimensions
+    db.session.execute(text("DELETE FROM dim_time WHERE year = :year AND NOT EXISTS (SELECT 1 FROM fact_accident WHERE time_id = dim_time.time_id)"))
+    db.session.execute(text("DELETE FROM dim_location WHERE NOT EXISTS (SELECT 1 FROM fact_accident WHERE location_id = dim_location.location_id)"))
+    db.session.execute(text("DELETE FROM dim_weather WHERE NOT EXISTS (SELECT 1 FROM fact_accident WHERE weather_id = dim_weather.weather_id)"))
+    
+    db.session.commit()
+    
+    return jsonify({"message": f"Année {year} supprimée de TOUTES les tables"}), 200
         
-        road_flags = {}
-        for r in db.session.query(AccidentRaw).all():
-            road_flags[str(r.accident_id)] = {
-                "Amenity": getattr(r, "amenity", False) or False,
-                "Bump": getattr(r, "bump", False) or False,
-                "Crossing": getattr(r, "crossing", False) or False,
-                "Give_Way": getattr(r, "give_way", False) or False,
-                "Junction": getattr(r, "junction", False) or False,
-                "No_Exit": getattr(r, "no_exit", False) or False,
-                "Railway": getattr(r, "railway", False) or False,
-                "Roundabout": getattr(r, "roundabout", False) or False,
-                "Station": getattr(r, "station", False) or False,
-                "Stop": getattr(r, "stop", False) or False,
-                "Traffic_Calming": getattr(r, "traffic_calming", False) or False,
-                "Traffic_Signal": getattr(r, "traffic_signal", False) or False,
-                "Turning_Loop": getattr(r, "turning_loop", False) or False,
-            }
-        
-        print(f"[{job_name}] Road flags loaded for {len(road_flags):,} accidents")
-
-        # =========================================================
-        # 5. TRAITER LES NOUVEAUX ACCIDENTS
-        # =========================================================
-        print(f"[{job_name}] Processing {len(new_accidents):,} new accidents...")
-
-        fact_batch = []
-        seen_in_run = set()
-
-        for idx, row in enumerate(new_accidents):
-            if idx % 5000 == 0 and idx > 0:
-                print(f"[{job_name}] Progress: {idx}/{len(new_accidents)} ({total_new_facts} new facts)")
-
-            if row.start_time is None or row.severity is None:
-                total_skipped += 1
-                continue
-
-            aid = str(row.accident_id)
-            if aid in seen_in_run:
-                total_skipped += 1
-                continue
-            seen_in_run.add(aid)
-
-            dt = row.start_time
-            dow = dt.weekday()
-
-            # --- DimTime ---
-            t_key = (dt.year, dt.month, dt.day, dt.hour)
-            if t_key not in time_cache:
-                dim_t = DimTime(
-                    year=dt.year, month=dt.month, day=dt.day, hour=dt.hour,
-                    day_of_week=dow,
-                    week_of_year=dt.isocalendar()[1],
-                    season=row.season or _season(dt.month),
-                    time_of_day=row.time_of_day or _time_of_day(dt.hour),
-                    is_weekend=dow >= 5,
-                    month_name=calendar.month_name[dt.month],
-                    day_name=calendar.day_name[dow],
-                )
-                db.session.add(dim_t)
-                db.session.flush()
-                time_cache[t_key] = dim_t.time_id
-                new_dim_time += 1
-
-            # --- DimLocation ---
-            loc_key = (
-                (row.city or "").strip().lower(),
-                (row.state or "").strip().upper(),
-                round(row.latitude or 0.0, 6),
-                round(row.longitude or 0.0, 6)
-            )
-
-            if loc_key not in location_cache:
-                dim_l = DimLocation(
-                    city=row.city,
-                    state=row.state,
-                    latitude=row.latitude,
-                    longitude=row.longitude,
-                    us_region=_us_region(row.state),
-                )
-                db.session.add(dim_l)
-                db.session.flush()
-                location_cache[loc_key] = dim_l.location_id
-                new_dim_location += 1
-
-            # --- DimWeather ---
-            wc = (row.weather_condition or "Inconnu").strip()
-            w_key = (
-                wc.lower(),
-                round(row.temperature_c or 0.0, 1),
-                round(row.visibility_km or 0.0, 1)
-            )
-
-            if w_key not in weather_cache:
-                dim_w = DimWeather(
-                    weather_condition=wc,
-                    temperature_c=row.temperature_c,
-                    visibility_km=row.visibility_km,
-                    temp_bucket=_temp_bucket(row.temperature_c),
-                    visibility_bucket=_visibility_bucket(row.visibility_km),
-                )
-                db.session.add(dim_w)
-                db.session.flush()
-                weather_cache[w_key] = dim_w.weather_id
-                new_dim_weather += 1
-
-            # --- DimRoad ---
-            flags = road_flags.get(aid, {})
-            r_key = (
-                flags.get("Amenity", False),
-                flags.get("Bump", False),
-                flags.get("Crossing", False),
-                flags.get("Give_Way", False),
-                flags.get("Junction", False),
-                flags.get("No_Exit", False),
-                flags.get("Railway", False),
-                flags.get("Roundabout", False),
-                flags.get("Station", False),
-                flags.get("Stop", False),
-                flags.get("Traffic_Calming", False),
-                flags.get("Traffic_Signal", False),
-                flags.get("Turning_Loop", False),
-            )
-
-            if r_key not in road_cache:
-                dim_r = DimRoad(
-                    amenity=r_key[0], bump=r_key[1], crossing=r_key[2],
-                    give_way=r_key[3], junction=r_key[4], no_exit=r_key[5],
-                    railway=r_key[6], roundabout=r_key[7], station=r_key[8],
-                    stop=r_key[9], traffic_calming=r_key[10],
-                    traffic_signal=r_key[11], turning_loop=r_key[12],
-                    feature_count=sum(r_key),
-                )
-                db.session.add(dim_r)
-                db.session.flush()
-                road_cache[r_key] = dim_r.road_id
-                new_dim_road += 1
-
-            # --- FactAccident ---
-            fact_batch.append(FactAccident(
-                accident_id=aid,
-                time_id=time_cache[t_key],
-                location_id=location_cache[loc_key],
-                weather_id=weather_cache[w_key],
-                road_id=road_cache[r_key],
-                severity=row.severity,
-                severity_label=row.severity_label,
-                duration_min=row.duration_min,
-                start_time=row.start_time,
-                end_time=row.end_time,
-            ))
-
-            if len(fact_batch) >= FLUSH_SIZE:
-                db.session.bulk_save_objects(fact_batch)
-                db.session.commit()
-                total_new_facts += len(fact_batch)
-                print(f"[{job_name}] Flushed {total_new_facts:,} new facts")
-                fact_batch = []
-
-        # Final flush
-        if fact_batch:
-            db.session.bulk_save_objects(fact_batch)
-            db.session.commit()
-            total_new_facts += len(fact_batch)
-
-        status = "success"
-        elapsed = round(time.time() - t0, 2)
-
-        print(f"[{job_name}] ✅ COMPLETED in {elapsed}s")
-        print(f"[{job_name}] New facts: {total_new_facts:,}")
-        print(f"[{job_name}] New dimensions: time={new_dim_time}, loc={new_dim_location}, weather={new_dim_weather}, road={new_dim_road}")
-        print(f"[{job_name}] 🎨 French labels: ACTIVE")
-        print(f"[{job_name}] 📁 NO CSV used - road flags from database")
-
-        return jsonify({
-            "message": f"Added {total_new_facts:,} new accidents to datamart (NO CSV).",
-            "rows_inserted": total_new_facts,
-            "rows_skipped": total_skipped,
-            "rows_processed": len(new_accidents),
-            "new_dimensions": {
-                "time": new_dim_time,
-                "location": new_dim_location,
-                "weather": new_dim_weather,
-                "road": new_dim_road
-            },
-            "duration_seconds": elapsed,
-            "french_labels": True,
-            "no_csv": True
-        }), 201
-
-    except Exception as exc:
-        error_msg = str(exc)
-        traceback.print_exc()
-        db.session.rollback()
-        return jsonify({"message": "Datamart build failed.", "detail": error_msg}), 500
-
-    finally:
-        JobManager.unregister(etl_job.id)
-        _finish_etl_job(
-            etl_job,
-            status=status,
-            rows_processed=len(new_accidents) if 'new_accidents' in locals() else 0,
-            rows_inserted=total_new_facts,
-            rows_skipped=total_skipped,
-            error_message=error_msg,
-            duration_seconds=time.time() - t0,
-        )
