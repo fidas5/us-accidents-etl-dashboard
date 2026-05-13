@@ -1,3 +1,4 @@
+# backend/app/api/datamart.py
 """
 build_datamart.py  —  ETL Step 3 (INCREMENTAL - NO CSV)
 """
@@ -18,6 +19,7 @@ from .. import db
 from ..models import AccidentClean, AccidentRaw, ETLJob
 from ..models import DimTime, DimLocation, DimWeather, DimRoad, FactAccident
 from .job_manager import JobManager, JobManagerError
+from .datamart_builder import DatamartBuilder
 
 datamart_bp = Blueprint("datamart", __name__, url_prefix="/etl")
 
@@ -139,404 +141,383 @@ def _finish_etl_job(
 @datamart_bp.route("/years-distribution", methods=["GET"])
 @jwt_required()
 def years_distribution():
-    """Retourne la distribution des années dans fact_accident"""
+    """Retourne la distribution des années présentes dans raw, clean ET datamart"""
     try:
-        result = db.session.execute(text("""
+        # Récupérer les compteurs par année
+        raw_result = db.session.execute(text("""
+            SELECT 
+                EXTRACT(YEAR FROM start_time_raw::timestamp)::INTEGER as year,
+                COUNT(*) as count
+            FROM accidents_raw
+            WHERE start_time_raw IS NOT NULL
+            GROUP BY year
+        """)).fetchall()
+        
+        clean_result = db.session.execute(text("""
+            SELECT 
+                EXTRACT(YEAR FROM start_time)::INTEGER as year,
+                COUNT(*) as count
+            FROM accidents_clean
+            WHERE start_time IS NOT NULL
+            GROUP BY year
+        """)).fetchall()
+        
+        fact_result = db.session.execute(text("""
             SELECT 
                 EXTRACT(YEAR FROM start_time)::INTEGER as year,
                 COUNT(*) as count
             FROM fact_accident
-            GROUP BY EXTRACT(YEAR FROM start_time)
-            ORDER BY year DESC
-        """))
+            WHERE start_time IS NOT NULL
+            GROUP BY year
+        """)).fetchall()
         
-        years = [{"year": row[0], "count": row[1]} for row in result]
+        # Créer les mappings
+        raw_map = {r[0]: r[1] for r in raw_result}
+        clean_map = {r[0]: r[1] for r in clean_result}
+        fact_map = {r[0]: r[1] for r in fact_result}
         
-        return jsonify({"years": years}), 200
+        # Union de toutes les années
+        all_years = sorted(set(raw_map.keys()) | set(clean_map.keys()) | set(fact_map.keys()), reverse=True)
+        
+        years_data = []
+        for year in all_years:
+            raw_count = raw_map.get(year, 0)
+            clean_count = clean_map.get(year, 0)
+            fact_count = fact_map.get(year, 0)
+            
+            years_data.append({
+                "year": year,
+                "count": max(raw_count, clean_count, fact_count),
+                "raw_count": raw_count,
+                "clean_count": clean_count,
+                "fact_count": fact_count,
+                "has_raw": raw_count > 0,
+                "has_clean": clean_count > 0,
+                "has_fact": fact_count > 0,
+                "status": "complete" if fact_count > 0 else "partial"
+            })
+        
+        return jsonify({"years": years_data}), 200
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-# ── Endpoint 2: Build Datamart (version année par année) ──────────────────────
-@datamart_bp.route("/build-datamart", methods=["POST"])
+# ─── Endpoints modulaires pour le datamart ─────────────────────────────────
+
+@datamart_bp.route("/build-dim-time", methods=["POST"])
 @jwt_required()
-def build_datamart():
-    """
-    Version ULTRA-RAPIDE - Traite TOUTES les années si year non spécifié
-    """
+def build_dim_time():
+    """Construit uniquement la dimension temporelle pour une année"""
     data = request.get_json() or {}
-    target_year = data.get("year")
+    year = data.get("year")
     
-    # ✅ Si year est None, undefined, ou "all" -> traiter TOUTES les années
-    if target_year is None or target_year == "all":
-        # Appeler la version qui traite toutes les années
-        return build_datamart_all_years()
+    if not year:
+        return jsonify({"error": "Année requise"}), 400
     
-    # Sinon, traiter l'année spécifique
-    t0 = time.time()
-    etl_job = _create_etl_job(f"build-datamart-{target_year}")
-    job_name = f"build-datamart-{target_year}"
-
-    error_msg = None
-    status = "failed"
-    total_facts_inserted = 0
-
-    print(f"[{job_name}] ========== IMPORT UNIQUEMENT {target_year} ==========")
-
-    try:
-        JobManager.register(etl_job.id, job_name)
-
-        # Vérifier ce qui existe déjà
-        existing_count = db.session.execute(
-            text("SELECT COUNT(*) FROM fact_accident WHERE EXTRACT(YEAR FROM start_time) = :year"),
-            {"year": target_year}
-        ).scalar()
-        
-        total_to_import = db.session.execute(
-            text("SELECT COUNT(*) FROM accidents_clean WHERE EXTRACT(YEAR FROM start_time) = :year"),
-            {"year": target_year}
-        ).scalar()
-        
-        print(f"[{job_name}] Année {target_year}: {existing_count:,} / {total_to_import:,} déjà dans datamart")
-        
-        if existing_count >= total_to_import and total_to_import > 0:
-            return jsonify({
-                "message": f"Année {target_year} déjà complète",
-                "year": target_year,
-                "current": existing_count,
-                "total": total_to_import,
-                "percentage": 100
-            }), 200
-
-        # Supprimer les données existantes pour cette année
-        if existing_count > 0:
-            db.session.execute(
-                text("DELETE FROM fact_accident WHERE EXTRACT(YEAR FROM start_time) = :year"),
-                {"year": target_year}
-            )
-            db.session.commit()
-
-        # Insérer uniquement l'année sélectionnée
-        result = db.session.execute(text("""
-            INSERT INTO fact_accident (
-                accident_id, time_id, location_id, weather_id, road_id,
-                severity, severity_label, duration_min, start_time, end_time
-            )
-            SELECT DISTINCT ON (c.accident_id)
-                c.accident_id,
-                t.time_id,
-                l.location_id,
-                w.weather_id,
-                1 as road_id,
-                c.severity,
-                c.severity_label,
-                c.duration_min,
-                c.start_time,
-                c.end_time
-            FROM accidents_clean c
-            INNER JOIN dim_time t ON 
-                t.year = EXTRACT(YEAR FROM c.start_time)::INTEGER
-                AND t.month = EXTRACT(MONTH FROM c.start_time)::INTEGER
-                AND t.day = EXTRACT(DAY FROM c.start_time)::INTEGER
-                AND t.hour = EXTRACT(HOUR FROM c.start_time)::INTEGER
-            INNER JOIN dim_location l ON 
-                COALESCE(c.city, '') = COALESCE(l.city, '')
-                AND COALESCE(c.state, '') = COALESCE(l.state, '')
-                AND COALESCE(c.latitude, 0) = COALESCE(l.latitude, 0)
-                AND COALESCE(c.longitude, 0) = COALESCE(l.longitude, 0)
-            INNER JOIN dim_weather w ON 
-                COALESCE(c.weather_condition, 'Inconnu') = w.weather_condition
-                AND COALESCE(c.temperature_c, 0) = COALESCE(w.temperature_c, 0)
-                AND COALESCE(c.visibility_km, 0) = COALESCE(w.visibility_km, 0)
-            WHERE EXTRACT(YEAR FROM c.start_time) = :year
-            AND NOT EXISTS (
-                SELECT 1 FROM fact_accident f 
-                WHERE f.accident_id = c.accident_id
-            )
-            ORDER BY c.accident_id, c.start_time
-            ON CONFLICT (accident_id) DO NOTHING
-        """), {"year": target_year})
-
-        total_facts_inserted = result.rowcount
-        db.session.commit()
-
-        final_count = db.session.execute(
-            text("SELECT COUNT(*) FROM fact_accident WHERE EXTRACT(YEAR FROM start_time) = :year"),
-            {"year": target_year}
-        ).scalar()
-
-        total_clean = db.session.execute(
-            text("SELECT COUNT(*) FROM accidents_clean WHERE EXTRACT(YEAR FROM start_time) = :year"),
-            {"year": target_year}
-        ).scalar()
-
-        elapsed = time.time() - t0
-        status = "success"
-
-        return jsonify({
-            "message": f"Année {target_year} importée en {elapsed:.1f} secondes",
-            "year": target_year,
-            "rows_inserted": total_facts_inserted,
-            "current": final_count,
-            "total": total_clean,
-            "percentage": round(100.0 * final_count / total_clean, 2) if total_clean > 0 else 0,
-            "duration_seconds": round(elapsed, 2)
-        }), 200
-
-    except Exception as exc:
-        error_msg = str(exc)
-        traceback.print_exc()
-        db.session.rollback()
-        return jsonify({"message": "Datamart build failed.", "detail": error_msg}), 500
-
-    finally:
-        JobManager.unregister(etl_job.id)
-        _finish_etl_job(
-            etl_job,
-            status=status,
-            rows_processed=total_clean if 'total_clean' in locals() else 0,
-            rows_inserted=total_facts_inserted,
-            rows_skipped=0,
-            error_message=error_msg,
-            duration_seconds=time.time() - t0,
-        )
+    builder = DatamartBuilder(int(year))
+    result = builder.build_dim_time()
+    
+    return jsonify({
+        "message": f"dim_time construit pour {year}",
+        "year": year,
+        "entries": len(result)
+    }), 200
 
 
-def build_datamart_all_years():
-    """Version qui traite TOUTES les années (comportement original)"""
-    t0 = time.time()
-    etl_job = _create_etl_job("build-datamart-all")
-    job_name = "build-datamart-all"
-
-    try:
-        JobManager.register(etl_job.id, job_name)
-        
-        # Insérer TOUS les faits (sans filtre d'année)
-        result = db.session.execute(text("""
-            INSERT INTO fact_accident (
-                accident_id, time_id, location_id, weather_id, road_id,
-                severity, severity_label, duration_min, start_time, end_time
-            )
-            SELECT DISTINCT ON (c.accident_id)
-                c.accident_id,
-                t.time_id,
-                l.location_id,
-                w.weather_id,
-                1 as road_id,
-                c.severity,
-                c.severity_label,
-                c.duration_min,
-                c.start_time,
-                c.end_time
-            FROM accidents_clean c
-            INNER JOIN dim_time t ON 
-                t.year = EXTRACT(YEAR FROM c.start_time)::INTEGER
-                AND t.month = EXTRACT(MONTH FROM c.start_time)::INTEGER
-                AND t.day = EXTRACT(DAY FROM c.start_time)::INTEGER
-                AND t.hour = EXTRACT(HOUR FROM c.start_time)::INTEGER
-            INNER JOIN dim_location l ON 
-                COALESCE(c.city, '') = COALESCE(l.city, '')
-                AND COALESCE(c.state, '') = COALESCE(l.state, '')
-                AND COALESCE(c.latitude, 0) = COALESCE(l.latitude, 0)
-                AND COALESCE(c.longitude, 0) = COALESCE(l.longitude, 0)
-            INNER JOIN dim_weather w ON 
-                COALESCE(c.weather_condition, 'Inconnu') = w.weather_condition
-                AND COALESCE(c.temperature_c, 0) = COALESCE(w.temperature_c, 0)
-                AND COALESCE(c.visibility_km, 0) = COALESCE(w.visibility_km, 0)
-            WHERE NOT EXISTS (
-                SELECT 1 FROM fact_accident f 
-                WHERE f.accident_id = c.accident_id
-            )
-            ORDER BY c.accident_id, c.start_time
-            ON CONFLICT (accident_id) DO NOTHING
-        """))
-
-        total_inserted = result.rowcount
-        db.session.commit()
-
-        total_facts = db.session.execute(text("SELECT COUNT(*) FROM fact_accident")).scalar()
-        total_clean = db.session.execute(text("SELECT COUNT(*) FROM accidents_clean")).scalar()
-        elapsed = time.time() - t0
-
-        return jsonify({
-            "message": f"Datamart construit en {elapsed:.1f} secondes",
-            "rows_inserted": total_inserted,
-            "total_facts": total_facts,
-            "total_clean_records": total_clean,
-            "completion_percentage": round(100.0 * total_facts / total_clean, 2) if total_clean > 0 else 0,
-            "duration_seconds": round(elapsed, 2)
-        }), 200
-
-    except Exception as exc:
-        db.session.rollback()
-        return jsonify({"message": "Datamart build failed.", "detail": str(exc)}), 500
-
-    finally:
-        JobManager.unregister(etl_job.id)
+@datamart_bp.route("/build-dim-location", methods=["POST"])
+@jwt_required()
+def build_dim_location():
+    """Construit uniquement la dimension géographique"""
+    data = request.get_json() or {}
+    year = data.get("year")
+    
+    if not year:
+        return jsonify({"error": "Année requise"}), 400
+    
+    builder = DatamartBuilder(int(year))
+    result = builder.build_dim_location()
+    
+    return jsonify({
+        "message": f"dim_location construit pour {year}",
+        "year": year,
+        "entries": len(result)
+    }), 200
 
 
-# ── Endpoint 3: Supprimer une année (uniquement du datamart) ──────────────────
+@datamart_bp.route("/build-dim-weather", methods=["POST"])
+@jwt_required()
+def build_dim_weather():
+    """Construit uniquement la dimension météo"""
+    data = request.get_json() or {}
+    year = data.get("year")
+    
+    if not year:
+        return jsonify({"error": "Année requise"}), 400
+    
+    builder = DatamartBuilder(int(year))
+    result = builder.build_dim_weather()
+    
+    return jsonify({
+        "message": f"dim_weather construit pour {year}",
+        "year": year,
+        "entries": len(result)
+    }), 200
+
+
+@datamart_bp.route("/build-fact", methods=["POST"])
+@jwt_required()
+def build_fact():
+    """Construit uniquement la table de faits (les dimensions doivent exister)"""
+    data = request.get_json() or {}
+    year = data.get("year")
+    
+    if not year:
+        return jsonify({"error": "Année requise"}), 400
+    
+    builder = DatamartBuilder(int(year))
+    
+    # Charger les mappings existants
+    builder.build_dim_time()
+    builder.build_dim_location()
+    builder.build_dim_weather()
+    builder.build_dim_road()
+    
+    result = builder.build_fact_accident()
+    
+    return jsonify({
+        "message": f"fact_accident construit pour {year}",
+        "year": year,
+        "rows_inserted": result["rows_inserted"],
+        "total_expected": result["total"],
+        "batches": result["batches"]
+    }), 200
+
+
+@datamart_bp.route("/build-datamart-full", methods=["POST"])
+@jwt_required()
+def build_datamart_full():
+    """Exécute TOUTES les étapes séquentiellement (complet)"""
+    data = request.get_json() or {}
+    year = data.get("year")
+    
+    if not year:
+        return jsonify({"error": "Année requise"}), 400
+    
+    builder = DatamartBuilder(int(year))
+    result = builder.run_all()
+    
+    return jsonify({
+        "message": f"Datamart complet construit pour {year}",
+        "result": result
+    }), 200
+
+
+
+# ── Endpoint 3: Delete year ──────────────────────────────────────────────────
+
 @datamart_bp.route("/delete-year", methods=["POST"])
 @jwt_required()
 def delete_year():
     data = request.get_json()
     year = data.get("year")
-
-    print(f"[delete-year] ========== START year={year!r} (type={type(year).__name__}) ==========")
-
+    
     if not year:
         return jsonify({"message": "Year required"}), 400
-
-    # Normalize: EXTRACT() returns float (e.g. 2021.0), so a raw int param
-    # like 2021 will silently match nothing without the ::INTEGER cast below.
+    
     try:
         year_int = int(year)
-    except (ValueError, TypeError) as e:
-        print(f"[delete-year] ❌ Cannot cast year to int: {e}")
+    except (ValueError, TypeError):
         return jsonify({"error": f"Invalid year value: {year!r}"}), 400
-
-    print(f"[delete-year] year normalized → {year_int}")
-
+    
     try:
-        # ── 1. PRE-DELETION COUNTS ────────────────────────────────────────────
-        raw_count = db.session.execute(
-            text("""
-                SELECT COUNT(*) FROM accidents_raw
-                WHERE EXTRACT(YEAR FROM start_time_raw::timestamp)::INTEGER = :year
-            """),
+        # Pré-suppression - récupérer les compteurs
+        raw_count_before = db.session.execute(
+            text("SELECT COUNT(*) FROM accidents_raw WHERE EXTRACT(YEAR FROM start_time_raw::timestamp)::INTEGER = :year"),
             {"year": year_int},
         ).scalar()
-
-        clean_count = db.session.execute(
+        
+        clean_count_before = db.session.execute(
             text("SELECT COUNT(*) FROM accidents_clean WHERE EXTRACT(YEAR FROM start_time)::INTEGER = :year"),
             {"year": year_int},
         ).scalar()
-
-        fact_count = db.session.execute(
+        
+        fact_count_before = db.session.execute(
             text("SELECT COUNT(*) FROM fact_accident WHERE EXTRACT(YEAR FROM start_time)::INTEGER = :year"),
             {"year": year_int},
         ).scalar()
-
-        print(
-            f"[delete-year] PRE-DELETE → "
-            f"fact={fact_count:,}  clean={clean_count:,}  raw={raw_count:,}"
-        )
-
-        # ⚠️  Zero counts = the cast on start_time_raw is probably wrong
-        if raw_count == 0 and clean_count == 0 and fact_count == 0:
-            samples = db.session.execute(
-                text("SELECT start_time_raw FROM accidents_raw LIMIT 5")
-            ).fetchall()
-            print(f"[delete-year] ⚠️  Nothing found — sample start_time_raw values: {[r[0] for r in samples]}")
-            return jsonify({
-                "message": f"No data found for year {year_int}",
-                "debug": {"raw_count": 0, "clean_count": 0, "fact_count": 0},
-            }), 404
-
-        # ── 2. DELETIONS — child tables first (FK order) ──────────────────────
-        print("[delete-year] Step 1/3 — fact_accident …")
-        r1 = db.session.execute(
+        
+        # Suppression - ordre inverse des dépendances
+        fact_deleted = db.session.execute(
             text("DELETE FROM fact_accident WHERE EXTRACT(YEAR FROM start_time)::INTEGER = :year"),
             {"year": year_int},
-        )
-        print(f"[delete-year]   → {r1.rowcount:,} rows")
-
-        print("[delete-year] Step 2/3 — accidents_clean …")
-        r2 = db.session.execute(
+        ).rowcount
+        
+        clean_deleted = db.session.execute(
             text("DELETE FROM accidents_clean WHERE EXTRACT(YEAR FROM start_time)::INTEGER = :year"),
             {"year": year_int},
-        )
-        print(f"[delete-year]   → {r2.rowcount:,} rows")
-
-        print("[delete-year] Step 3/3 — accidents_raw …")
-        r3 = db.session.execute(
-            text("""
-                DELETE FROM accidents_raw
-                WHERE EXTRACT(YEAR FROM start_time_raw::timestamp)::INTEGER = :year
-            """),
+        ).rowcount
+        
+        raw_deleted = db.session.execute(
+            text("DELETE FROM accidents_raw WHERE EXTRACT(YEAR FROM start_time_raw::timestamp)::INTEGER = :year"),
             {"year": year_int},
-        )
-        print(f"[delete-year]   → {r3.rowcount:,} rows")
-
-        # ── 3. COMMIT ─────────────────────────────────────────────────────────
-        print("[delete-year] Committing …")
+        ).rowcount
+        
         db.session.commit()
-        print("[delete-year] ✅ Commit OK")
-
-        # ── 4. POST-DELETION SANITY CHECK ─────────────────────────────────────
-        after_raw   = db.session.execute(text("SELECT COUNT(*) FROM accidents_raw   WHERE EXTRACT(YEAR FROM start_time_raw::timestamp)::INTEGER = :year"), {"year": year_int}).scalar()
-        after_clean = db.session.execute(text("SELECT COUNT(*) FROM accidents_clean WHERE EXTRACT(YEAR FROM start_time)::INTEGER = :year"),                  {"year": year_int}).scalar()
-        after_fact  = db.session.execute(text("SELECT COUNT(*) FROM fact_accident   WHERE EXTRACT(YEAR FROM start_time)::INTEGER = :year"),                  {"year": year_int}).scalar()
-
-        print(f"[delete-year] POST-DELETE → fact={after_fact}  clean={after_clean}  raw={after_raw}")
-
-        if after_raw > 0 or after_clean > 0 or after_fact > 0:
-            print("[delete-year] ⚠️  Rows still present after commit — possible FK violation or autocommit mode issue")
-
+        
         return jsonify({
-            "message": f"Année {year_int} supprimée",
+            "message": f"Année {year_int} supprimée avec succès",
+            "year": year_int,
             "deleted": {
-                "fact_accident":  r1.rowcount,
-                "accidents_clean": r2.rowcount,
-                "accidents_raw":   r3.rowcount,
+                "fact_accident": fact_deleted,
+                "accidents_clean": clean_deleted,
+                "accidents_raw": raw_deleted,
             },
-            "remaining": {
-                "fact_accident":  after_fact,
-                "accidents_clean": after_clean,
-                "accidents_raw":   after_raw,
-            },
+            "before": {
+                "fact_accident": fact_count_before,
+                "accidents_clean": clean_count_before,
+                "accidents_raw": raw_count_before,
+            }
         }), 200
-
+        
     except Exception as e:
         db.session.rollback()
-        print(f"[delete-year] ❌ EXCEPTION {type(e).__name__}: {e}")
         traceback.print_exc()
-        return jsonify({"error": str(e), "type": type(e).__name__}), 500
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Endpoint 4: Year pipeline status ──────────────────────────────────────────
 
 @datamart_bp.route("/year-status", methods=["GET"])
 @jwt_required()
 def year_status():
-    """Retourne l'état de chaque année dans le pipeline"""
+    """Retourne l'état de chaque année dans le pipeline - VERSION OPTIMISÉE"""
     try:
-        # État pour toutes les années
-        result = db.session.execute(text("""
-            WITH years AS (
-                SELECT DISTINCT EXTRACT(YEAR FROM start_time_raw::timestamp) as year
+        # ✅ Limiter aux années qui ont des données (pas besoin de toutes)
+        # Utiliser des requêtes groupées plutôt que des CTE complexes
+        
+        # Récupérer les années distinctes depuis clean (la source principale)
+        clean_years = db.session.execute(text("""
+            SELECT DISTINCT EXTRACT(YEAR FROM start_time)::INTEGER as year
+            FROM accidents_clean
+            WHERE start_time IS NOT NULL
+            ORDER BY year DESC
+        """)).fetchall()
+        
+        if not clean_years:
+            # Si clean est vide, essayer raw
+            clean_years = db.session.execute(text("""
+                SELECT DISTINCT EXTRACT(YEAR FROM start_time_raw::timestamp)::INTEGER as year
                 FROM accidents_raw
-                UNION
-                SELECT DISTINCT EXTRACT(YEAR FROM start_time) as year
-                FROM accidents_clean
-                UNION
-                SELECT DISTINCT EXTRACT(YEAR FROM start_time) as year
-                FROM fact_accident
-            )
-            SELECT 
-                y.year,
-                CASE WHEN r.accident_id IS NOT NULL THEN true ELSE false END as raw_exists,
-                CASE WHEN c.accident_id IS NOT NULL THEN true ELSE false END as clean_exists,
-                CASE WHEN f.accident_id IS NOT NULL THEN true ELSE false END as fact_exists,
-                COALESCE(r.count, 0) as raw_count,
-                COALESCE(c.count, 0) as clean_count,
-                COALESCE(f.count, 0) as fact_count
-            FROM years y
-            LEFT JOIN (SELECT EXTRACT(YEAR FROM start_time_raw::timestamp) as year, COUNT(*) as count, MIN(accident_id) as accident_id FROM accidents_raw GROUP BY year) r ON y.year = r.year
-            LEFT JOIN (SELECT EXTRACT(YEAR FROM start_time) as year, COUNT(*) as count, MIN(accident_id) as accident_id FROM accidents_clean GROUP BY year) c ON y.year = c.year
-            LEFT JOIN (SELECT EXTRACT(YEAR FROM start_time) as year, COUNT(*) as count, MIN(accident_id) as accident_id FROM fact_accident GROUP BY year) f ON y.year = f.year
-            ORDER BY y.year DESC
-        """))
+                WHERE start_time_raw IS NOT NULL
+                ORDER BY year DESC
+            """)).fetchall()
         
         years_status = []
-        for row in result:
+        for row in clean_years:
+            year = row[0]
+            
+            # Compter pour cette année seulement (requêtes ciblées avec index)
+            raw_count = db.session.execute(
+                text("SELECT COUNT(*) FROM accidents_raw WHERE EXTRACT(YEAR FROM start_time_raw::timestamp)::INTEGER = :year"),
+                {"year": year}
+            ).scalar() or 0
+            
+            clean_count = db.session.execute(
+                text("SELECT COUNT(*) FROM accidents_clean WHERE EXTRACT(YEAR FROM start_time)::INTEGER = :year"),
+                {"year": year}
+            ).scalar() or 0
+            
+            fact_count = db.session.execute(
+                text("SELECT COUNT(*) FROM fact_accident WHERE EXTRACT(YEAR FROM start_time)::INTEGER = :year"),
+                {"year": year}
+            ).scalar() or 0
+            
             years_status.append({
-                "year": row[0],
-                "raw_exists": row[1],
-                "clean_exists": row[2],
-                "fact_exists": row[3],
-                "raw_count": row[4],
-                "clean_count": row[5],
-                "fact_count": row[6]
+                "year": year,
+                "raw_exists": raw_count > 0,
+                "clean_exists": clean_count > 0,
+                "fact_exists": fact_count > 0,
+                "raw_count": raw_count,
+                "clean_count": clean_count,
+                "fact_count": fact_count,
             })
         
         return jsonify({"years_status": years_status}), 200
+        
     except Exception as e:
+        print(f"[year-status] Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
+    
+# ── Endpoint 5: Pipeline status global ─────────────────────────────────────────
+
+@datamart_bp.route("/pipeline-status", methods=["GET"])
+@jwt_required()
+def pipeline_status():
+    """Retourne l'état global du pipeline ETL - VERSION OPTIMISÉE"""
+    try:
+        # ✅ Utiliser des compteurs rapides avec des requêtes simples
+        # et éviter les COUNT(*) sur des millions de lignes si possible
+        
+        # Utiliser des requêtes avec index (si les tables ont des indexes sur start_time)
+        raw_count = db.session.execute(text("""
+            SELECT reltuples::bigint AS estimate 
+            FROM pg_class 
+            WHERE relname = 'accidents_raw'
+        """)).scalar() or 0
+        
+        clean_count = db.session.execute(text("""
+            SELECT reltuples::bigint AS estimate 
+            FROM pg_class 
+            WHERE relname = 'accidents_clean'
+        """)).scalar() or 0
+        
+        fact_count = db.session.execute(text("""
+            SELECT reltuples::bigint AS estimate 
+            FROM pg_class 
+            WHERE relname = 'fact_accident'
+        """)).scalar() or 0
+        
+        # Si les estimations sont trop imprécises, faire un vrai COUNT une seule fois
+        if raw_count < 1000:  # Seulement pour les petites tables
+            raw_count = db.session.execute(text("SELECT COUNT(*) FROM accidents_raw")).scalar() or 0
+            clean_count = db.session.execute(text("SELECT COUNT(*) FROM accidents_clean")).scalar() or 0
+            fact_count = db.session.execute(text("SELECT COUNT(*) FROM fact_accident")).scalar() or 0
+        
+        print(f"[Pipeline] raw: {raw_count}, clean: {clean_count}, fact: {fact_count}")
+        
+        # Vérifier si clean est complet
+        clean_complete = clean_count > 0 and clean_count == raw_count
+        
+        # Calculer le pourcentage de complétion du datamart
+        completion_percentage = round(100.0 * fact_count / clean_count, 2) if clean_count > 0 else 0
+        datamart_complete = fact_count >= clean_count and clean_count > 0
+        
+        csv_exists = raw_count > 0
+        
+        return jsonify({
+            "csv_exists": csv_exists,
+            "raw": {
+                "exists": raw_count > 0,
+                "count": raw_count,
+                "is_complete": raw_count > 0
+            },
+            "clean": {
+                "exists": clean_count > 0,
+                "count": clean_count,
+                "is_complete": clean_complete
+            },
+            "datamart": {
+                "exists": fact_count > 0,
+                "count": fact_count,
+                "expected_count": clean_count,
+                "completion_percentage": completion_percentage,
+                "is_complete": datamart_complete
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"[Pipeline] Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    
+

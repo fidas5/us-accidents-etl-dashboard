@@ -22,7 +22,7 @@ import { VisibilityRisk } from "../components/dashboard/VisibilityRisk";
 
 // Import types and constants
 import type { Filters } from "./types/dashboard.types";
-import { useIsDark, extractError } from "./utils/dashboard.utils";
+import { useIsDark } from "./utils/dashboard.utils";
 import { DARK, LIGHT } from "./themes/dashboard.themes";
 
 export default function Dashboard() {
@@ -263,16 +263,6 @@ export default function Dashboard() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
           <SeverityChart data={data.sevData} t={t} />
           <WeatherChart data={data.weatherData} t={t} />
-        </div>
-
-        {/* Row 2: Road Feature and Visibility Risk */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-          {data.sevByRoadFeat && data.sevByRoadFeat.length > 0 && (
-            <SeverityByRoadFeature data={data.sevByRoadFeat} t={t} />
-          )}
-          {data.visRisk && data.visRisk.length > 0 && (
-            <VisibilityRisk data={data.visRisk} t={t} />
-          )}
         </div>
 
         <SectionDivider label="Tendances" t={t} />

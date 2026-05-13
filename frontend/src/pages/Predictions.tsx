@@ -4,8 +4,11 @@ import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import { useIsDark } from "./utils/dashboard.utils";
 import { DARK, LIGHT } from "./themes/dashboard.themes";
+import "./predictions.css"; // ← Import du CSS externe
 
-const API = "http://127.0.0.1:5050";
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const API = import.meta.env.VITE_API_URL;
 
 const SEASONS = ["Printemps", "Été", "Automne", "Hiver"];
 const TIME_OF_DAY = ["Matin", "Après-midi", "Soir", "Nuit"];
@@ -33,6 +36,24 @@ const SEV_DESCRIPTIONS_FR = {
   3: "Accident grave avec blessures confirmées. Perturbation significative du trafic.",
   4: "Accident grave avec blessures majeures ou décès. Fermeture complète de la route."
 };
+
+const ROAD_FEATURES = [
+  { key: 'traffic_signal', label: '🚦 Feu de signalisation' },
+  { key: 'crossing', label: '🚸 Passage piéton' },
+  { key: 'junction', label: '🔀 Jonction' },
+  { key: 'stop', label: '🛑 Stop' },
+  { key: 'railway', label: '🚆 Passage à niveau' },
+  { key: 'station', label: '🚉 Station' },
+  { key: 'amenity', label: '🏪 Équipement' },
+  { key: 'bump', label: '⛔ Ralentisseur' },
+  { key: 'give_way', label: '⚠️ Cédez le passage' },
+  { key: 'no_exit', label: '🚫 Impasse' },
+  { key: 'roundabout', label: '🔄 Rond-point' },
+  { key: 'traffic_calming', label: '📉 Modérateur de trafic' },
+  { key: 'turning_loop', label: '↩️ Boucle de retournement' }
+] as const;
+
+type RoadFeatureKey = typeof ROAD_FEATURES[number]['key'];
 
 interface PredictionForm {
   duration_min: number;
@@ -74,36 +95,38 @@ interface PredictionResult {
   };
 }
 
+// État initial du formulaire
+const INITIAL_FORM: PredictionForm = {
+  duration_min: 30,
+  hour: 12,
+  month: 6,
+  day_of_week: 2,
+  temperature_c: 20,
+  visibility_km: 10,
+  season: "Été",
+  time_of_day: "Après-midi",
+  state: "CA",
+  weather_condition: "Clair",
+  us_region: "Ouest",
+  traffic_signal: false,
+  crossing: false,
+  junction: false,
+  railway: false,
+  stop: false,
+  station: false,
+  amenity: false,
+  give_way: false,
+  bump: false,
+  no_exit: false,
+  roundabout: false,
+  traffic_calming: false,
+  turning_loop: false
+};
+
 const PredictorContent: React.FC<{ t: any }> = ({ t }) => {
   const { token } = useAuth();
   
-  const [form, setForm] = useState<PredictionForm>({
-    duration_min: 30,
-    hour: 12,
-    month: 6,
-    day_of_week: 2,
-    temperature_c: 20,
-    visibility_km: 10,
-    season: "Été",
-    time_of_day: "Après-midi",
-    state: "CA",
-    weather_condition: "Clair",
-    us_region: "Ouest",
-    traffic_signal: false,
-    crossing: false,
-    junction: false,
-    railway: false,
-    stop: false,
-    station: false,
-    amenity: false,
-    give_way: false,
-    bump: false,
-    no_exit: false,
-    roundabout: false,
-    traffic_calming: false,
-    turning_loop: false
-  });
-  
+  const [form, setForm] = useState<PredictionForm>(INITIAL_FORM);
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [predicting, setPredicting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +135,7 @@ const PredictorContent: React.FC<{ t: any }> = ({ t }) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const updateRoadFlag = (flag: keyof PredictionForm) => {
+  const updateRoadFlag = (flag: RoadFeatureKey) => {
     setForm(prev => ({ ...prev, [flag]: !prev[flag] }));
   };
 
@@ -140,10 +163,7 @@ const PredictorContent: React.FC<{ t: any }> = ({ t }) => {
     }
   };
 
-  const activeRoadCount = Object.entries(form).filter(([key, val]) => 
-    ['traffic_signal', 'crossing', 'junction', 'railway', 'stop', 'station', 
-     'amenity', 'give_way', 'bump', 'no_exit', 'roundabout', 'traffic_calming', 'turning_loop'].includes(key) && val === true
-  ).length;
+  const activeRoadCount = ROAD_FEATURES.filter(f => form[f.key]).length;
 
   const getConfidenceLevelFR = (level: string) => {
     if (level === "High") return "Élevée";
@@ -334,31 +354,17 @@ const PredictorContent: React.FC<{ t: any }> = ({ t }) => {
             <span>🛣️</span> Infrastructures routières
           </div>
           <div className="pr-road-grid">
-            {[
-              { key: 'traffic_signal', label: '🚦 Feu de signalisation' },
-              { key: 'crossing', label: '🚸 Passage piéton' },
-              { key: 'junction', label: '🔀 Jonction' },
-              { key: 'stop', label: '🛑 Stop' },
-              { key: 'railway', label: '🚆 Passage à niveau' },
-              { key: 'station', label: '🚉 Station' },
-              { key: 'amenity', label: '🏪 Équipement' },
-              { key: 'bump', label: '⛔ Ralentisseur' },
-              { key: 'give_way', label: '⚠️ Cédez le passage' },
-              { key: 'no_exit', label: '🚫 Impasse' },
-              { key: 'roundabout', label: '🔄 Rond-point' },
-              { key: 'traffic_calming', label: '📉 Modérateur de trafic' },
-              { key: 'turning_loop', label: '↩️ Boucle de retournement' }
-            ].map(({ key, label }) => (
+            {ROAD_FEATURES.map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => updateRoadFlag(key as keyof PredictionForm)}
-                className={`pr-road-flag ${form[key as keyof PredictionForm] ? 'active' : ''}`}
+                onClick={() => updateRoadFlag(key)}
+                className={`pr-road-flag ${form[key] ? 'active' : ''}`}
                 style={{ 
-                  borderColor: form[key as keyof PredictionForm] ? t.accent : t.border,
-                  background: form[key as keyof PredictionForm] ? `${t.accent}20` : 'transparent'
+                  borderColor: form[key] ? t.accent : t.border,
+                  background: form[key] ? `${t.accent}20` : 'transparent'
                 }}
               >
-                <span className="pr-road-dot" style={{ background: form[key as keyof PredictionForm] ? t.accent : 'transparent' }}></span>
+                <span className="pr-road-dot" style={{ background: form[key] ? t.accent : 'transparent' }}></span>
                 <span>{label}</span>
               </button>
             ))}
@@ -383,8 +389,6 @@ const PredictorContent: React.FC<{ t: any }> = ({ t }) => {
             <>🔮 Prédire la sévérité</>
           )}
         </button>
-        
-        
       </div>
       
       {/* Colonne droite - Résultats */}
@@ -496,19 +500,11 @@ const PredictorContent: React.FC<{ t: any }> = ({ t }) => {
                   <span className="pr-summary-key" style={{ color: t.textMuted }}>Infrastructures</span>
                   <div className="pr-road-active-list">
                     {activeRoadCount === 0 && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Aucune</span>}
-                    {form.traffic_signal && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Feu</span>}
-                    {form.crossing && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Passage piéton</span>}
-                    {form.junction && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Jonction</span>}
-                    {form.railway && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Passage à niveau</span>}
-                    {form.stop && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Stop</span>}
-                    {form.station && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Station</span>}
-                    {form.amenity && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Équipement</span>}
-                    {form.bump && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Ralentisseur</span>}
-                    {form.give_way && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Cédez</span>}
-                    {form.no_exit && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Impasse</span>}
-                    {form.roundabout && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Rond-point</span>}
-                    {form.traffic_calming && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Modérateur</span>}
-                    {form.turning_loop && <span className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>Boucle</span>}
+                    {ROAD_FEATURES.filter(f => form[f.key]).map(f => (
+                      <span key={f.key} className="pr-road-chip" style={{ background: `${t.accent}20`, color: '#93c5fd' }}>
+                        {f.label.split(' ')[1] || f.label}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -526,115 +522,19 @@ export default function Predictions() {
   const t = isDark ? DARK : LIGHT;
 
   return (
-    <>
-      <style>{`
-        /* ── Layout ─────────────────────────────────────────── */
-        .pr-title { font-size: 22px; font-weight: 500; color: var(--text-main); margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
-        .pr-sub   { font-size: 12px; color: var(--text-muted); font-family: var(--mono); margin: 0 0 28px; }
-        .pr-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-        @media (max-width: 900px) { .pr-layout { grid-template-columns: 1fr; } }
-
-        /* ── Cards ──────────────────────────────────────────── */
-        .pr-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
-        .pr-card-title { font-size: 13px; font-weight: 500; color: #93c5fd; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 16px; display: flex; align-items: center; gap: 6px; }
-        .pr-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
-        .pr-section-title { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-
-        /* ── Fields ─────────────────────────────────────────── */
-        .pr-field { margin-bottom: 16px; }
-        .pr-label { display: block; font-size: 11px; color: var(--text-muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
-        .pr-row2  { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .pr-input, .pr-select { width: 100%; height: 36px; padding: 0 12px; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text-main); font-size: 13px; font-family: inherit; transition: border-color .15s; }
-        .pr-input:focus, .pr-select:focus { outline: none; border-color: var(--primary-color); }
-
-        /* ── Sliders ────────────────────────────────────────── */
-        .pr-slider-wrap { display: flex; align-items: center; gap: 10px; }
-        .pr-slider { flex: 1; accent-color: var(--primary-color); }
-        .pr-slider-val { font-size: 13px; color: #93c5fd; font-family: var(--mono); min-width: 60px; text-align: right; }
-
-        /* ── Pill button grids ─────────────────────────────── */
-        .pr-pill-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-        .pr-pill { height: 28px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 11px; cursor: pointer; font-family: var(--mono); transition: all .1s; white-space: nowrap; }
-        .pr-pill:hover  { background: var(--primary-color-soft); color: #93c5fd; }
-        .pr-pill.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
-
-        /* ── Road flags grid ────────────────────────────────── */
-        .pr-road-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; }
-        .pr-road-flag {
-          display: flex; align-items: center; gap: 7px;
-          padding: 7px 10px; border-radius: 8px;
-          border: 1px solid var(--border);
-          background: transparent; cursor: pointer;
-          font-size: 12px; font-family: inherit;
-          color: var(--text-muted);
-          transition: all .12s; text-align: left;
-        }
-        .pr-road-flag:hover { border-color: #3b82f6; color: var(--text-main); }
-        .pr-road-flag.active { border-color: #3b82f6; background: rgba(59,130,246,0.12); color: #93c5fd; }
-        .pr-road-dot { width: 8px; height: 8px; border-radius: 50%; border: 2px solid currentColor; flex-shrink: 0; transition: all .12s; }
-        .pr-road-flag.active .pr-road-dot { background: #3b82f6; border-color: #3b82f6; }
-        .pr-road-hint { font-size: 10px; color: var(--text-muted); margin-top: 8px; font-family: var(--mono); }
-
-        /* ── Predict button ─────────────────────────────────── */
-        .pr-predict-btn { width: 100%; height: 42px; border-radius: 10px; border: none; background: linear-gradient(135deg, #3b82f6, #6366f1); color: white; font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity .15s; margin-top: 20px; }
-        .pr-predict-btn:hover    { opacity: .88; }
-        .pr-predict-btn:disabled { opacity: .45; cursor: not-allowed; }
-
-        /* ── Model info bar ─────────────────────────────────── */
-        .pr-model-bar { margin-top: 12px; padding: 9px 12px; background: var(--surface2); border-radius: 8px; font-size: 11px; color: var(--text-muted); font-family: var(--mono); text-align: center; }
-
-        /* ── Result card ────────────────────────────────────── */
-        .pr-result-wrap { border-radius: 12px; padding: 22px; border: 1px solid var(--border); margin-bottom: 16px; }
-        .pr-result-top  { text-align: center; margin-bottom: 20px; }
-        .pr-result-eyebrow { font-size: 11px; color: var(--text-muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
-        .pr-result-num    { font-size: 72px; font-weight: 500; line-height: 1; margin-bottom: 8px; }
-        .pr-result-badge  { display: inline-block; padding: 4px 16px; border-radius: 99px; font-size: 13px; font-weight: 500; margin-bottom: 8px; }
-        .pr-result-desc   { font-size: 13px; color: var(--text-muted); }
-        .pr-result-conf   { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
-
-        /* ── Probability bars ───────────────────────────────── */
-        .pr-proba-label-row { font-size: 11px; color: var(--text-muted); font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
-        .pr-proba-grid { display: flex; flex-direction: column; gap: 10px; }
-        .pr-proba-row  { display: flex; align-items: center; gap: 10px; }
-        .pr-proba-sev  { font-size: 12px; font-family: var(--mono); width: 80px; flex-shrink: 0; font-weight: 500; }
-        .pr-proba-track { flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
-        .pr-proba-fill  { height: 100%; border-radius: 4px; transition: width .6s ease; }
-        .pr-proba-pct   { font-size: 12px; font-family: var(--mono); color: var(--text-muted); width: 45px; text-align: right; flex-shrink: 0; font-weight: 500; }
-
-        /* ── Input summary ──────────────────────────────────── */
-        .pr-summary { display: flex; flex-direction: column; gap: 0; margin-top: 16px; }
-        .pr-summary-row { display: flex; justify-content: space-between; font-size: 12px; padding: 7px 0; border-bottom: 1px solid var(--border); }
-        .pr-summary-row:last-child { border-bottom: none; }
-        .pr-summary-key { color: var(--text-muted); font-family: var(--mono); }
-        .pr-summary-val { color: var(--text-main); font-weight: 500; }
-        .pr-road-active-list { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
-        .pr-road-chip { font-size: 10px; padding: 2px 7px; border-radius: 10px; background: rgba(59,130,246,0.15); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); font-family: var(--mono); }
-
-        /* ── Idle / loading / error states ─────────────────── */
-        .pr-idle    { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 56px 24px; text-align: center; gap: 12px; }
-        .pr-idle-txt { font-size: 13px; color: var(--text-muted); font-family: var(--mono); }
-        .pr-error   { padding: 14px; border-radius: 10px; background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.2); color: #f87171; font-size: 13px; font-family: var(--mono); display: flex; gap: 8px; align-items: flex-start; }
-        .pr-loading { display: flex; align-items: center; justify-content: center; padding: 56px; color: var(--text-muted); font-size: 13px; font-family: var(--mono); gap: 10px; }
-
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .spin { animation: spin 1s linear infinite; display: inline-block; }
-        .db-spinner { width:18px;height:18px;border:2px solid rgba(255,255,255,0.1);border-top-color:#38bdf8;border-radius:50%;animation:spin .7s linear infinite; }
-      `}</style>
-      <div className="db-root" style={{ padding: "24px", maxWidth: "1400px", margin: "0 auto" }}>
-        <header style={{ marginBottom: "28px" }}>
-          <h1 style={{ 
-            fontFamily: "'Syne', sans-serif", 
-            fontSize: "28px", 
-            fontWeight: 800, 
-            color: t.textStrong, 
-            margin: "0 0 8px" 
-          }}>
-            Prédiction de sévérité
-          </h1>
-         
-        </header>
-        <PredictorContent t={t} />
-      </div>
-    </>
+    <div className="db-root" style={{ padding: "24px", maxWidth: "1400px", margin: "0 auto" }}>
+      <header style={{ marginBottom: "28px" }}>
+        <h1 style={{ 
+          fontFamily: "'Syne', sans-serif", 
+          fontSize: "28px", 
+          fontWeight: 800, 
+          color: t.textStrong, 
+          margin: "0 0 8px" 
+        }}>
+          Prédiction de sévérité
+        </h1>
+      </header>
+      <PredictorContent t={t} />
+    </div>
   );
 }

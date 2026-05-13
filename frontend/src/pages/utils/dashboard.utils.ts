@@ -1,4 +1,19 @@
-// Utility functions
+
+/**
+ * 🛠️ DASHBOARD UTILS - Fonctions utilitaires partagées
+ * 
+ * Ce fichier contient des fonctions réutilisables pour :
+ * - Détection du thème (dark/light)
+ * - Construction des paramètres d'URL
+ * 
+ * 🎯 Pourquoi ce fichier ?
+ * - Évite la duplication de code
+ * - Centralise la logique réutilisable
+ * - Facilite les tests unitaires
+ */
+
+
+
 import { AxiosError } from "axios";
 import type { Filters } from "../types/dashboard.types";
 
@@ -6,17 +21,7 @@ export function useIsDark() {
   // Implementation from original
 }
 
-export function extractError(err: unknown): string {
-  if (err instanceof AxiosError) {
-    const d = err.response?.data;
-    if (d?.detail) return String(d.detail);
-    if (d?.error) return String(d.error);
-    if (d?.message) return String(d.message);
-    if (!err.response) return "Cannot reach server — is the backend running?";
-    return `Server error ${err.response.status}`;
-  }
-  return err instanceof Error ? err.message : "Unexpected error";
-}
+
 
 export function buildQS(f: Filters): string {
   const p = new URLSearchParams();

@@ -1,7 +1,28 @@
-import React, { useState, useEffect } from "react";
+
+/**
+ * 📊 COMPOSANT JOB MONITOR - Surveillance des tâches ETL en arrière-plan
+ * 
+ * Ce composant affiche une fenêtre flottante (en bas à droite) qui montre
+ * les tâches ETL actuellement en cours d'exécution sur le serveur.
+ * 
+ * 🎯 Objectifs :
+ * - Visualiser les tâches longues (nettoyage, datamart, etc.)
+ * - Voir la durée d'exécution de chaque tâche
+ * - Être informé quand une tâche est en cours (feedback utilisateur)
+ * - Fonctionner en mode autonome ou intégré dans une page parente
+ 
+
+ * 🎨 UI/UX :
+ * - N'apparaît que si au moins 1 job est en cours
+ */
+
+
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
-import { Play, Square, Loader, CheckCircle2, AlertCircle } from "lucide-react";
+import { Square, Loader } from "lucide-react";
+
+const API = import.meta.env.VITE_API_URL;
 
 interface RunningJob {
   job_id: string;
@@ -12,89 +33,71 @@ interface RunningJob {
 }
 
 interface JobMonitorProps {
-  onJobCancelled?: () => void;
+  runningJobs?: RunningJob[];
 }
 
-export const JobMonitor: React.FC<JobMonitorProps> = ({ onJobCancelled }) => {
+export const JobMonitor: React.FC<JobMonitorProps> = ({
+  runningJobs: externalJobs,
+}) => {
   const { token } = useAuth();
-  const [runningJobs, setRunningJobs] = useState<RunningJob[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [cancellingJob, setCancellingJob] = useState<string | null>(null);
+  const [internalJobs, setInternalJobs] = useState<RunningJob[]>([]);
 
-  const fetchRunningJobs = async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await axios.get("http://127.0.0.1:5050/etl/running-jobs", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setRunningJobs(res.data.running_jobs || []);
-    } catch (err) {
-      console.error("Failed to fetch running jobs:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const cancelJob = async (jobId: string) => {
-    if (!token) return;
-    setCancellingJob(jobId);
+  const jobs = externalJobs ?? internalJobs;
+  const isStandalone = externalJobs === undefined;
+
+  const fetchRunningJobs = useCallback(async () => {
+    if (!token || !isStandalone) return;
     try {
-      await axios.post(`http://127.0.0.1:5050/etl/cancel-job/${jobId}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await axios.get(`${API}/etl/running-jobs`, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10_000,
       });
-      // Refresh the list
-      await fetchRunningJobs();
-      if (onJobCancelled) onJobCancelled();
-    } catch (err) {
-      console.error("Failed to cancel job:", err);
-    } finally {
-      setCancellingJob(null);
+      setInternalJobs(res.data.running_jobs ?? []);
+    } catch {
     }
-  };
+  }, [token, isStandalone]);
 
   useEffect(() => {
+    if (!isStandalone) return;
     fetchRunningJobs();
-    // Poll every 3 seconds for updates
-    const interval = setInterval(fetchRunningJobs, 120000);
-    return () => clearInterval(interval);
-  }, [token]);
+    // Poll every 5 s when running standalone 
+    const id = setInterval(fetchRunningJobs, 5_000);
+    return () => clearInterval(id);
+  }, [fetchRunningJobs, isStandalone]);
 
-  if (runningJobs.length === 0) {
-    return null;
-  }
+
+
+  const fmtDuration = (s: number) => {
+    if (s < 60) return `${Math.floor(s)}s`;
+    return `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
+  };
+
+  if (jobs.length === 0) return null;
 
   return (
     <div className="job-monitor">
       <div className="job-monitor-header">
         <div className="job-monitor-title">
           <Loader size={14} className="spin" />
-          Tâches en cours ({runningJobs.length})
+          Tâches en cours ({jobs.length})
         </div>
       </div>
+
       <div className="job-monitor-list">
-        {runningJobs.map(job => (
+        {jobs.map((job) => (
           <div key={job.job_id} className="job-monitor-item">
             <div className="job-info">
               <span className="job-name">{job.name}</span>
               <span className="job-duration">
-En cours depuis {Math.floor(job.duration_seconds)}s              </span>
+                En cours depuis {fmtDuration(job.duration_seconds)}
+              </span>
             </div>
-            <button
-              className="job-cancel-btn"
-              onClick={() => cancelJob(job.job_id)}
-              disabled={cancellingJob === job.job_id}
-            >
-              {cancellingJob === job.job_id ? (
-                <Loader size={14} className="spin" />
-              ) : (
-                <Square size={14} />
-              )}
-              Arrêter
-            </button>
+        
           </div>
         ))}
       </div>
+
       <style>{`
         .job-monitor {
           position: fixed;
@@ -121,6 +124,13 @@ En cours depuis {Math.floor(job.duration_seconds)}s              </span>
           font-weight: 600;
           color: var(--text-main);
         }
+        .job-monitor-error {
+          padding: 8px 16px;
+          font-size: 11px;
+          color: #f87171;
+          background: rgba(239,68,68,0.08);
+          border-bottom: 1px solid var(--border);
+        }
         .job-monitor-list {
           max-height: 300px;
           overflow-y: auto;
@@ -132,9 +142,7 @@ En cours depuis {Math.floor(job.duration_seconds)}s              </span>
           padding: 12px 16px;
           border-bottom: 1px solid var(--border);
         }
-        .job-monitor-item:last-child {
-          border-bottom: none;
-        }
+        .job-monitor-item:last-child { border-bottom: none; }
         .job-info {
           display: flex;
           flex-direction: column;
@@ -171,12 +179,8 @@ En cours depuis {Math.floor(job.duration_seconds)}s              </span>
           opacity: 0.5;
           cursor: not-allowed;
         }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        .spin {
-          animation: spin 1s linear infinite;
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin { animation: spin 1s linear infinite; }
       `}</style>
     </div>
   );

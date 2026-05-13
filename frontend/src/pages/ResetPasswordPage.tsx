@@ -2,6 +2,17 @@
 import React, { useState, useEffect } from "react";
 import { Lock, ArrowRight, AlertCircle, CheckCircle2, Layers, ArrowLeft } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
+/**
+ *react-router-dom c’est quoi ?
+ * 
+ * C’est une bibliothèque qui permet de :
+ * changer de page sans recharger le site
+ * gérer les routes (/home, /login, etc.)
+ *
+Link : remplace les balises <a> classiques.
+useNavigate :Permet de changer de page dans le code (ex: après un login réussi). :navigation par clic utilisateur
+useLocation : Permet d’accéder à l’URL actuelle et aux données passées entre les pages (ex: email pour reset password). : navigation automatique via code
+ */
 import { useTheme } from "../context/ThemeContext";
 import authService from "../services/authService";
 

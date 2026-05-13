@@ -1,7 +1,47 @@
-// src/services/authService.ts
+/**
+ * 🔐 SERVICE D'AUTHENTIFICATION - Gestion des utilisateurs et sessions
+ * 
+ * Ce service centralise toute la logique d'authentification de l'application.
+ * Il communique avec l'API backend et gère la persistance des sessions.
+ * 
+ * 🎯 Objectifs :
+ * - Inscription des nouveaux utilisateurs
+ * - Connexion/déconnexion des utilisateurs
+ * - Vérification email (code de validation)
+ * - Réinitialisation de mot de passe (forgot + reset)
+ * - Persistance de session (localStorage + token JWT)
+ * - Configuration automatique des headers axios
+ * 
+ * 🔧 Fonctionnalités :
+ * - Stockage sécurisé : Token JWT dans localStorage
+ * - Configuration auto : Headers Authorization pour toutes les requêtes
+ * - Session persistante : L'utilisateur reste connecté après refresh
+ * - Gestion d'erreurs : Messages explicites pour l'UI
+ * 
+ * 🔄 Flux d'authentification :
+ * 1. Inscription → Email de vérification
+ * 2. Vérification email → Token JWT + Session
+ * 3. Connexion → Token JWT + Session
+ * 4. Mot de passe oublié → Code → Reset → Nouveau token
+ * 5. Déconnexion → Nettoyage localStorage + Headers
+ * 
+ * @example
+ * // Connexion
+ * const response = await authService.login('user@email.com', 'password');
+ * // → Stocke token + user, configure axios
+ * 
+ * // Vérifier authentification
+ * if (authService.isAuthenticated()) {
+ *   const user = authService.getCurrentUser();
+ * }
+ * 
+ * // Déconnexion
+ * authService.logout();
+ */
+
 import axios from "axios";
 
-const API_BASE_URL = "http://127.0.0.1:5050";
+const API_BASE_URL =  import.meta.env.VITE_API_URL;
 
 // ✅ Export des interfaces
 export interface User {

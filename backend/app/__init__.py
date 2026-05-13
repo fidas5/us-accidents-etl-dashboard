@@ -9,7 +9,7 @@ from sqlalchemy import inspect
 
 from .config import Config
 
-db = SQLAlchemy()
+db = SQLAlchemy()   # instance SQLAlchemy
 migrate = Migrate()
 jwt = JWTManager()
 mail = Mail()
@@ -50,14 +50,12 @@ def create_app():
     from .routes.etl import etl_bp
     from .routes.stats import stats_bp
     from .routes.datamart import datamart_bp 
-    from .routes.ai import ai_bp   
     from .routes.predict import predict_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(etl_bp, url_prefix="/etl")
     app.register_blueprint(stats_bp, url_prefix="/api/stats")
     app.register_blueprint(datamart_bp, url_prefix="/etl")
-    app.register_blueprint(ai_bp, url_prefix="/ai")
     app.register_blueprint(predict_bp, url_prefix="/api/predict")
 
 

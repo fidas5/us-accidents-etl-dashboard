@@ -18,7 +18,6 @@ import ETLPage from "./pages/ETLJobs";
 import PredictPage from "./pages/Predictions";
 
 
-
 import { ThemeProvider } from "./context/ThemeContext";
 
 

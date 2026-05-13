@@ -1,4 +1,38 @@
-// src/pages/components/USMap.tsx
+/**
+ * 🗺️ COMPOSANT CARTE INTERACTIVE - Visualisation géographique des accidents
+ * 
+ * Ce composant affiche une carte des États-Unis avec des cercles proportionnels
+ * représentant le nombre et la sévérité des accidents par ville.
+ * 
+ * 🎯 Objectifs :
+ * - Visualiser la répartition géographique des accidents
+ * - Identifier les zones à risque (grands cercles rouges/oranges)
+ * - Permettre l'exploration interactive (zoom, pan, clic)
+q
+ * 
+ * 🗺️ Technologie : Leaflet
+ * - Bibliothèque de cartographie open-source 
+ * - Tuiles OpenStreetMap (gratuites, sans clé API)
+ * 
+ * 
+ * 🔄 Cycle de vie du composant :
+ * 1. Montage → Crée la carte avec tuiles dark/light
+ * 2. Réception des données cities → Dessine tous les cercles
+ * 3. Changement de thème → Remplace les tuiles (dark ↔ light)
+ * 4. Changement de filtres → Nouveaux cercles (via props)
+ * 5. Démontage → Nettoie la carte et les événements
+ * 
+ * 🖱️ Interactions utilisateur :
+ * - Zoom avant/arrière (boutons +/ -)
+ * - Déplacement de la carte (drag & drop)
+ * - Clic sur un cercle → Popup avec détails :
+ *   · Nom de la ville et état
+ *   · Nombre total d'accidents
+ *   · Gravité moyenne 
+ * 
+ */
+
+
 import React, { useRef, useEffect } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";

@@ -1,9 +1,30 @@
+/**
+ * 🚀 MAIN.TSX - Point d'entrée de l'application
+ * 
+ * Ce fichier est le tout premier code exécuté par l'application.
+ * Il monte l'application React dans le DOM et configure :
+ * - Le cache persistant (React Query)
+ * - Les styles globaux (Bootstrap, index.css)
+ * - Le mode strict (détection d'erreurs)
+ * 
+ * 🎯 Flux d'exécution :
+ * 1. Récupère la div "root" dans index.html
+ * 2. Crée un root React (React 18)
+ * 3. Entoure l'App avec les providers nécessaires
+ * 4. Affiche l'application dans le navigateur
+ * 
+ * 💾 Cache persistant :
+ * - Les données API sont sauvegardées dans localStorage
+ * - Valides pendant 24 heures
+ * - Refetch silencieux en arrière-plan
+ * - L'utilisateur voit les données immédiatement après refresh
+ */
+
 import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
+import { createRoot } from 'react-dom/client' // API React 18 pour le rendu
+import './index.css' // Styles CSS globaux
 import App from './App.tsx'
-import 'bootstrap/dist/css/bootstrap.min.css';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 

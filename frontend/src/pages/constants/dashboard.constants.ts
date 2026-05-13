@@ -1,4 +1,16 @@
-// Constants
+/**
+ * 📋 DASHBOARD CONSTANTS - Fichier central des constantes partagées
+ * 
+ * Ce fichier contient toutes les constantes utilisées dans le dashboard
+ * pour éviter la duplication et faciliter la maintenance.
+ * 
+ * 🎯 Avantages :
+ * - Changement unique (modifier une constante = mise à jour partout)
+ * - Code plus lisible 
+ * - Évite les erreurs de frappe
+ * - Centralisation des données métier
+  */
+
 export const SEV_COLORS: Record<string, string> = { Low: "#34d399", Moderate: "#f59e0b", High: "#fb923c", Critical: "#f43f5e" };
 export const SEV_OPTIONS = [{ value: 1, label: "Low", color: "#34d399" }, { value: 2, label: "Moderate", color: "#f59e0b" }, { value: 3, label: "High", color: "#fb923c" }, { value: 4, label: "Critical", color: "#f43f5e" }];
 export const MONTHS = [{ value: 1, name: "January" }, { value: 2, name: "February" }, { value: 3, name: "March" }, { value: 4, name: "April" }, { value: 5, name: "May" }, { value: 6, name: "June" }, { value: 7, name: "July" }, { value: 8, name: "August" }, { value: 9, name: "September" }, { value: 10, name: "October" }, { value: 11, name: "November" }, { value: 12, name: "December" }];

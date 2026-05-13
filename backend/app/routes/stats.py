@@ -1,12 +1,11 @@
-
 """
 stats.py — Dashboard KPI endpoints
 ====================================
 Queries run against the datamart star schema:
   fact_accident ← dim_time, dim_location, dim_weather, dim_road
 
-Active KPIs (KPI 6 road-features and KPI 8 duration removed — see audit):
-  KPI 1  /api/stats/overview          → total accidents, avg severity, years covered, severity breakdown
+Active KPIs:
+  KPI 1  /api/stats/overview          → total accidents, avg severity, years covered
   KPI 2  /api/stats/by-month          → monthly trend (count + avg severity)
   KPI 2b /api/stats/by-year           → year-over-year comparison
   KPI 3  /api/stats/by-severity       → severity distribution (count + pct)
@@ -16,8 +15,18 @@ Active KPIs (KPI 6 road-features and KPI 8 duration removed — see audit):
   KPI 7  /api/stats/by-hour           → peak hour heatmap (hour × day_of_week grid)
   KPI 9  /api/stats/by-env-bucket     → temp bucket + visibility bucket breakdown
 
-  Utility:
-  GET /api/stats/filter-options       → available years, states, months for the UI
+Additional Metrics:
+  /api/stats/avg-duration             → average accident duration
+  /api/stats/high-severity-rate       → percentage of high severity accidents
+  /api/stats/severity-by-road-feature → severity breakdown by road features
+  /api/stats/risk-multiplier          → risk multiplier based on severity
+  /api/stats/rush-hour-severity-index → severity during rush hours
+  /api/stats/duration-by-severity     → duration grouped by severity
+  /api/stats/night-risk-multiplier    → night vs day risk comparison
+  /api/stats/visibility-risk          → severity by visibility bucket
+
+Utility:
+  /api/stats/filter-options           → available years, states, months for the UI
 
 Supported query parameters (all optional, all combinable):
   ?year=2021,2022        comma-separated list of years
@@ -152,21 +161,10 @@ def _all_years_list() -> list[int]:
 @stats_bp.route("/overview", methods=["GET"])
 @jwt_required()
 def overview():
-    """
-    KPI 1 — Total accidents headline card.
-
-    Returns:
-      years_covered      — all years in datamart (for tab bar)
-      total_accidents    — COUNT(fact_id) with active filters
-      avg_severity       — AVG(severity) with active filters
-      avg_duration_min   — AVG(duration_min) — stored but not shown as KPI
-      severity_breakdown — {label: count} for the mini bar breakdown card
-    """
+    """KPI 1 — Total accidents headline card."""
     try:
-        # Total count (filtered)
         total = _apply_filters_to_query(_base_query()).count()
 
-        # Averages (filtered)
         query = _base_query()
         query = _apply_filters_to_query(query)
         agg_row = query.with_entities(
@@ -174,10 +172,8 @@ def overview():
             func.avg(FactAccident.duration_min).label("avg_duration"),
         ).one_or_none()
 
-        # All years — never filtered so the tab bar always shows the full set
         all_years = _all_years_list()
 
-        # Severity breakdown (filtered)
         sev_query = _base_query()
         sev_query = _apply_filters_to_query(sev_query)
         sev_rows = sev_query.with_entities(
@@ -206,18 +202,13 @@ def overview():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 2a — BY MONTH  (monthly trend line)
+#  KPI 2a — BY MONTH
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-month", methods=["GET"])
 @jwt_required()
 def by_month():
-    """
-    KPI 2a — Monthly trend.
-
-    Formula: COUNT(fact_id) GROUP BY month
-    Returns: [{month, month_name, count, avg_severity}] Jan → Dec
-    """
+    """KPI 2a — Monthly trend."""
     try:
         query = _base_query()
         query = _apply_filters_to_query(query)
@@ -249,21 +240,13 @@ def by_month():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 2b — BY YEAR  (year-over-year comparison)
+#  KPI 2b — BY YEAR
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-year", methods=["GET"])
 @jwt_required()
 def by_year():
-    """
-    KPI 2b — Year-over-year trend.
-
-    Formula: COUNT(fact_id) GROUP BY year
-    Returns: [{year, count, avg_severity, avg_duration_min}]
-
-    Pass ?ignore_year_filter=1 to always return all years
-    (useful for building the full YoY chart even when a year is selected).
-    """
+    """KPI 2b — Year-over-year trend."""
     try:
         ignore_year = request.args.get("ignore_year_filter", "0") == "1"
 
@@ -301,20 +284,13 @@ def by_year():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 3 — BY SEVERITY  (distribution)
+#  KPI 3 — BY SEVERITY
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-severity", methods=["GET"])
 @jwt_required()
 def by_severity():
-    """
-    KPI 3 — Severity distribution.
-
-    Formula:
-      COUNT(fact_id) GROUP BY severity
-      pct = count / SUM(count) * 100
-    Returns: [{severity, label, count, pct}] ordered 1→4
-    """
+    """KPI 3 — Severity distribution."""
     try:
         query = _base_query()
         query = _apply_filters_to_query(query)
@@ -351,19 +327,10 @@ def by_severity():
 @stats_bp.route("/by-state", methods=["GET"])
 @jwt_required()
 def by_state():
-    """
-    KPI 4a — Accidents by state.
-
-    Formula:
-      COUNT(fact_id) GROUP BY state
-      AVG(severity) per state
-    Returns: [{state, count, avg_severity}] ordered by count desc
-    ?limit=N  default 50
-    """
+    """KPI 4a — Accidents by state."""
     try:
         limit = max(1, min(int(request.args.get("limit", 50)), 500))
 
-        # Build base query with all joins
         query = db.session.query(
             DimLocation.state,
             func.count().label("count"),
@@ -375,7 +342,6 @@ def by_state():
          .join(DimRoad, FactAccident.road_id == DimRoad.road_id, isouter=True)\
          .filter(DimLocation.state.isnot(None))
 
-        # Apply filters manually
         years = _parse_ints("year")
         if years:
             query = query.filter(DimTime.year.in_(years))
@@ -414,25 +380,16 @@ def by_state():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 4b — MAP POINTS  (city-level bubbles)
+#  KPI 4b — MAP POINTS
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/map-points", methods=["GET"])
 @jwt_required()
 def map_points():
-    """
-    KPI 4b — City hotspot map.
-
-    Formula:
-      COUNT(fact_id) GROUP BY city, state
-      AVG(severity) per city
-      AVG(latitude), AVG(longitude) → bubble centre
-    ?city_limit=N  default 200
-    """
+    """KPI 4b — City hotspot map."""
     try:
         city_limit = max(1, min(int(request.args.get("city_limit", 200)), 500))
 
-        # State-level aggregation (for choropleth / reference)
         state_query = db.session.query(
             DimLocation.state,
             DimLocation.us_region,
@@ -448,7 +405,6 @@ def map_points():
          .filter(DimLocation.state.isnot(None))\
          .filter(DimLocation.latitude.isnot(None))
 
-        # Apply filters manually
         years = _parse_ints("year")
         if years:
             state_query = state_query.filter(DimTime.year.in_(years))
@@ -468,7 +424,6 @@ def map_points():
         state_rows = state_query.group_by(DimLocation.state, DimLocation.us_region)\
                                .order_by(func.count().desc()).all()
 
-        # City-level aggregation
         city_query = db.session.query(
             DimLocation.city,
             DimLocation.state,
@@ -484,7 +439,6 @@ def map_points():
          .filter(DimLocation.city.isnot(None))\
          .filter(DimLocation.latitude.isnot(None))
 
-        # Apply filters manually for city query
         years = _parse_ints("year")
         if years:
             city_query = city_query.filter(DimTime.year.in_(years))
@@ -541,21 +495,13 @@ def map_points():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 5 — BY WEATHER  (condition impact)
+#  KPI 5 — BY WEATHER
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-weather", methods=["GET"])
 @jwt_required()
 def by_weather():
-    """
-    KPI 5 — Weather impact on severity.
-
-    Formula:
-      COUNT(fact_id)    GROUP BY weather_condition
-      AVG(severity)     GROUP BY weather_condition
-    Returns: [{weather_condition, count, pct, avg_severity}] top N by count
-    ?limit=N  default 15
-    """
+    """KPI 5 — Weather impact on severity."""
     try:
         limit = max(1, min(int(request.args.get("limit", 15)), 100))
 
@@ -570,7 +516,6 @@ def by_weather():
          .join(DimRoad, FactAccident.road_id == DimRoad.road_id, isouter=True)\
          .filter(DimWeather.weather_condition.isnot(None))
 
-        # Apply filters manually
         years = _parse_ints("year")
         if years:
             query = query.filter(DimTime.year.in_(years))
@@ -611,22 +556,13 @@ def by_weather():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 7 — BY HOUR  (peak hour heatmap)
+#  KPI 7 — BY HOUR
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-hour", methods=["GET"])
 @jwt_required()
 def by_hour():
-    """
-    KPI 7 — Peak hour heatmap.
-
-    Formula:
-      COUNT(fact_id) GROUP BY hour, day_of_week
-      intensity = count / MAX(count) * 100   (normalised 0–100)
-    Returns:
-      grid: [{hour, day_of_week, day_name, count, intensity}]  (168 cells max)
-      summary: [{hour, total_count}]  (24 rows, for the marginal bar)
-    """
+    """KPI 7 — Peak hour heatmap."""
     try:
         query = db.session.query(
             DimTime.hour,
@@ -641,7 +577,6 @@ def by_hour():
          .filter(DimTime.hour.isnot(None))\
          .filter(DimTime.day_of_week.isnot(None))
 
-        # Apply filters manually
         years = _parse_ints("year")
         if years:
             query = query.filter(DimTime.year.in_(years))
@@ -675,7 +610,6 @@ def by_hour():
             for r in rows
         ]
 
-        # Marginal: total per hour across all days
         hour_totals: dict[int, int] = {}
         for r in rows:
             hour_totals[r.hour] = hour_totals.get(r.hour, 0) + r.count
@@ -693,31 +627,14 @@ def by_hour():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 9 — BY ENV BUCKET  (temp + visibility)
+#  KPI 9 — BY ENV BUCKET
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-env-bucket", methods=["GET"])
 @jwt_required()
 def by_env_bucket():
-    """
-    KPI 9 — Temperature and visibility bucket breakdown.
-
-    Formula (temp):
-      COUNT(fact_id) GROUP BY temp_bucket
-      AVG(severity)  GROUP BY temp_bucket
-      pct = count / SUM(count) * 100
-
-    Formula (visibility):
-      COUNT(fact_id) GROUP BY visibility_bucket
-      AVG(severity)  GROUP BY visibility_bucket
-      pct = count / SUM(count) * 100
-
-    Returns:
-      temp_buckets: [{bucket, count, pct, avg_severity}]
-      vis_buckets:  [{bucket, count, pct, avg_severity}]
-    """
+    """KPI 9 — Temperature and visibility bucket breakdown."""
     try:
-        # Temperature buckets query
         temp_query = db.session.query(
             DimWeather.temp_bucket,
             func.count().label("count"),
@@ -730,7 +647,6 @@ def by_env_bucket():
          .filter(DimWeather.temp_bucket.isnot(None))\
          .filter(DimWeather.temp_bucket != "Unknown")
 
-        # Apply filters manually for temp
         years = _parse_ints("year")
         if years:
             temp_query = temp_query.filter(DimTime.year.in_(years))
@@ -751,7 +667,6 @@ def by_env_bucket():
                              .order_by(func.count().desc())\
                              .all()
 
-        # Visibility buckets query
         vis_query = db.session.query(
             DimWeather.visibility_bucket,
             func.count().label("count"),
@@ -764,7 +679,6 @@ def by_env_bucket():
          .filter(DimWeather.visibility_bucket.isnot(None))\
          .filter(DimWeather.visibility_bucket != "Unknown")
 
-        # Apply filters manually for visibility
         years = _parse_ints("year")
         if years:
             vis_query = vis_query.filter(DimTime.year.in_(years))
@@ -785,7 +699,6 @@ def by_env_bucket():
                            .order_by(func.count().desc())\
                            .all()
 
-        # Bucket order for temperature (cold → hot)
         TEMP_ORDER = {"Freezing": 0, "Cold": 1, "Cool": 2, "Warm": 3, "Hot": 4}
         VIS_ORDER  = {"Poor": 0, "Moderate": 1, "Good": 2}
 
@@ -836,10 +749,7 @@ def by_env_bucket():
 @stats_bp.route("/filter-options", methods=["GET"])
 @jwt_required()
 def filter_options():
-    """
-    Returns all available filter values so the UI is fully data-driven.
-    Year list is always the complete set regardless of active filters.
-    """
+    """Returns all available filter values for the UI."""
     try:
         year_rows = (
             db.session.query(distinct(DimTime.year))
@@ -883,18 +793,13 @@ def filter_options():
 
 
 # ─────────────────────────────────────────────────────────────
-#  NEW KPIs (MUST HAVE)
+#  ADDITIONAL METRICS (USED BY DASHBOARD)
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/avg-duration", methods=["GET"])
 @jwt_required()
 def avg_duration():
-    """
-    MUST HAVE — Average Duration.
-
-    Returns:
-      avg_duration_min   — AVG(duration_min) with active filters
-    """
+    """Average Duration metric."""
     try:
         query = _base_query()
         query = _apply_filters_to_query(query)
@@ -915,14 +820,7 @@ def avg_duration():
 @stats_bp.route("/high-severity-rate", methods=["GET"])
 @jwt_required()
 def high_severity_rate():
-    """
-    MUST HAVE — High Severity Rate.
-
-    Formula:
-      (COUNT(fact_id) WHERE severity >= 3) / COUNT(fact_id) * 100
-    Returns:
-      high_severity_rate — Percentage of accidents with high severity (3 or 4)
-    """
+    """High Severity Rate metric."""
     try:
         base_query = _base_query()
         filtered_query = _apply_filters_to_query(base_query)
@@ -945,17 +843,8 @@ def high_severity_rate():
 @stats_bp.route("/severity-by-road-feature", methods=["GET"])
 @jwt_required()
 def severity_by_road_feature():
-    """
-    MUST HAVE — Severity by Road Feature.
-
-    Formula:
-      For each road feature (amenity, bump, crossing, etc.):
-      COUNT(fact_id) WHERE feature = True
-      AVG(severity) WHERE feature = True
-    Returns: [{road_feature, count, avg_severity}] ordered by count desc
-    """
+    """Severity by Road Feature metric."""
     try:
-        # List of road feature columns in DimRoad
         road_features = [
             'amenity', 'bump', 'crossing', 'give_way', 'junction', 
             'no_exit', 'railway', 'roundabout', 'station', 'stop', 
@@ -964,14 +853,12 @@ def severity_by_road_feature():
         
         results = []
         
-        # Apply filters once for all queries
         years = _parse_ints("year")
         severities = _parse_ints("severity")
         states = _parse_strings("state")
         months = _parse_ints("month")
         
         for feature in road_features:
-            # Build query for this specific road feature
             query = db.session.query(
                 func.count().label("count"),
                 func.avg(FactAccident.severity).label("avg_severity"),
@@ -980,9 +867,8 @@ def severity_by_road_feature():
              .join(DimTime, FactAccident.time_id == DimTime.time_id)\
              .join(DimLocation, FactAccident.location_id == DimLocation.location_id)\
              .join(DimWeather, FactAccident.weather_id == DimWeather.weather_id, isouter=True)\
-             .filter(getattr(DimRoad, feature) == True)  # Only accidents where this feature is present
+             .filter(getattr(DimRoad, feature) == True)
             
-            # Apply filters
             if years:
                 query = query.filter(DimTime.year.in_(years))
             if severities:
@@ -996,12 +882,11 @@ def severity_by_road_feature():
             
             if row and row.count > 0:
                 results.append({
-                    "road_feature": feature.replace('_', ' ').title(),  # Format nicely
+                    "road_feature": feature.replace('_', ' ').title(),
                     "count": row.count,
                     "avg_severity": _safe_round(row.avg_severity, 2),
                 })
         
-        # Sort by count descending
         results.sort(key=lambda x: x["count"], reverse=True)
         
         return jsonify({"data": results}), 200
@@ -1011,21 +896,12 @@ def severity_by_road_feature():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
+
 @stats_bp.route("/risk-multiplier", methods=["GET"])
 @jwt_required()
 def risk_multiplier():
-    """
-    MUST HAVE — Risk Multiplier.
-
-    This is a placeholder. A more complex calculation involving multiple factors
-    (e.g., road features, weather, time of day) would be implemented here.
-    For now, it returns a dummy value or a simple aggregation.
-    Returns:
-      risk_multiplier — A calculated risk multiplier.
-    """
+    """Risk Multiplier metric (based on average severity)."""
     try:
-        # Placeholder for a more complex risk multiplier calculation.
-        # For demonstration, let's return the average severity as a simple risk indicator.
         query = _base_query()
         query = _apply_filters_to_query(query)
         agg_row = query.with_entities(
@@ -1033,12 +909,9 @@ def risk_multiplier():
         ).one_or_none()
 
         risk_val = _safe_round(agg_row.avg_severity if agg_row else None, 2)
-        # A more sophisticated calculation would involve weighting different factors.
-        # For example: risk_multiplier = avg_severity * weather_factor * road_factor
 
         return jsonify({
             "risk_multiplier": risk_val,
-            "note": "This is a simplified risk multiplier based on average severity. A more complex model would integrate multiple factors."
         }), 200
 
     except ProgrammingError as exc:
@@ -1050,19 +923,8 @@ def risk_multiplier():
 @stats_bp.route("/rush-hour-severity-index", methods=["GET"])
 @jwt_required()
 def rush_hour_severity_index():
-    """
-    MUST HAVE — Rush Hour Severity Index.
-
-    Formula:
-      AVG(severity) for accidents occurring during defined rush hours (e.g., 6-9 AM and 4-7 PM on weekdays).
-    Returns:
-      rush_hour_severity_index — Average severity during rush hours.
-    """
+    """Rush Hour Severity Index metric."""
     try:
-        # Define rush hour periods (e.g., 6-9 AM and 4-7 PM on weekdays)
-        # Weekdays are 0-4 (Monday-Friday) if Sunday is 6
-        # Assuming DimTime.day_of_week is 0=Monday, 6=Sunday based on DAY_ORDER
-        # Let's assume 0=Monday to 4=Friday for weekdays
         RUSH_HOUR_MORNING_START = 6
         RUSH_HOUR_MORNING_END   = 9
         RUSH_HOUR_EVENING_START = 16
@@ -1071,7 +933,6 @@ def rush_hour_severity_index():
         query = _base_query()
         query = _apply_filters_to_query(query)
 
-        # Filter for weekdays (Monday=0 to Friday=4) and rush hour times
         query = query.filter(
             DimTime.day_of_week.in_([0, 1, 2, 3, 4]),
             (
@@ -1096,80 +957,10 @@ def rush_hour_severity_index():
         return jsonify({"error": str(exc)}), 500
 
 
-@stats_bp.route("/weather-severity-score", methods=["GET"])
-@jwt_required()
-def weather_severity_score():
-    """
-    MUST HAVE — Weather Severity Score.
-
-    Formula:
-      AVG(severity) grouped by weather conditions, potentially weighted.
-      For simplicity, we'll return average severity for each weather condition.
-    Returns: [{weather_condition, avg_severity}] ordered by avg_severity desc
-    """
-    try:
-        query = db.session.query(
-            DimWeather.weather_condition,
-            func.avg(FactAccident.severity).label("avg_severity"),
-            func.count().label("count"), # Include count to ensure enough data points
-        ).select_from(FactAccident)\
-         .join(DimWeather, FactAccident.weather_id == DimWeather.weather_id)\
-         .join(DimTime, FactAccident.time_id == DimTime.time_id, isouter=True)\
-         .join(DimLocation, FactAccident.location_id == DimLocation.location_id, isouter=True)\
-         .join(DimRoad, FactAccident.road_id == DimRoad.road_id, isouter=True)\
-         .filter(DimWeather.weather_condition.isnot(None))
-
-        # Apply filters manually
-        years = _parse_ints("year")
-        if years:
-            query = query.filter(DimTime.year.in_(years))
-        
-        severities = _parse_ints("severity")
-        if severities:
-            query = query.filter(FactAccident.severity.in_(severities))
-        
-        states = _parse_strings("state")
-        if states:
-            query = query.filter(DimLocation.state.in_(states))
-        
-        months = _parse_ints("month")
-        if months:
-            query = query.filter(DimTime.month.in_(months))
-
-        rows = query.group_by(DimWeather.weather_condition)\
-        .having(func.count() > 5)\
-        .order_by(func.avg(FactAccident.severity).desc())\
-        .all()
-
-        data = [
-            {
-                "weather_condition": r.weather_condition,
-                "avg_severity":      _safe_round(r.avg_severity, 2),
-            }
-            for r in rows
-        ]
-        return jsonify({"data": data}), 200
-
-    except ProgrammingError as exc:
-        return _handle_missing_tables(exc)
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
-
-# ─────────────────────────────────────────────────────────────
-#  NEW KPIs (IMPORTANT)
-# ─────────────────────────────────────────────────────────────
-
 @stats_bp.route("/duration-by-severity", methods=["GET"])
 @jwt_required()
 def duration_by_severity():
-    """
-    IMPORTANT — Duration by Severity.
-
-    Formula:
-      AVG(duration_min) GROUP BY severity
-    Returns: [{severity, label, avg_duration_min}] ordered 1→4
-    """
+    """Duration by Severity metric."""
     try:
         query = _base_query()
         query = _apply_filters_to_query(query)
@@ -1198,68 +989,23 @@ def duration_by_severity():
         return jsonify({"error": str(exc)}), 500
 
 
-@stats_bp.route("/road-complexity-index", methods=["GET"])
-@jwt_required()
-def road_complexity_index():
-    """
-    IMPORTANT — Road Complexity Index.
-
-    This is a placeholder. A more complex calculation involving road features,
-    number of lanes, speed limits, etc., would be implemented here.
-    For now, it returns a dummy value or a simple aggregation based on road features.
-    Returns:
-      road_complexity_index — A calculated road complexity index.
-    """
-    try:
-        # Placeholder for a more complex road complexity calculation.
-        # For demonstration, let's return the average severity as a simple indicator.
-        query = _base_query()
-        query = _apply_filters_to_query(query)
-        agg_row = query.with_entities(
-            func.avg(FactAccident.severity).label("avg_severity"),
-        ).one_or_none()
-
-        complexity_val = _safe_round(agg_row.avg_severity if agg_row else None, 2)
-        # A more sophisticated calculation could involve weighting different road attributes.
-
-        return jsonify({
-            "road_complexity_index": complexity_val,
-            "note": "This is a simplified road complexity index based on average severity. A more complex model would integrate various road attributes."
-        }), 200
-
-    except ProgrammingError as exc:
-        return _handle_missing_tables(exc)
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
-
 @stats_bp.route("/night-risk-multiplier", methods=["GET"])
 @jwt_required()
 def night_risk_multiplier():
-    """
-    IMPORTANT — Night Risk Multiplier.
-
-    Formula:
-      A multiplier indicating increased risk during night hours (e.g., 8 PM to 5 AM).
-      For simplicity, we'll compare average severity during night vs. day.
-    Returns:
-      night_risk_multiplier — A multiplier representing night-time risk.
-    """
+    """Night Risk Multiplier metric."""
     try:
-        NIGHT_START_HOUR = 20 # 8 PM
-        NIGHT_END_HOUR   = 5  # 5 AM
+        NIGHT_START_HOUR = 20
+        NIGHT_END_HOUR   = 5
 
         base_query = _base_query()
         filtered_query = _apply_filters_to_query(base_query)
 
-        # Average severity during night hours
         night_query = filtered_query.filter(
             (DimTime.hour >= NIGHT_START_HOUR) | (DimTime.hour < NIGHT_END_HOUR)
         )
         night_agg = night_query.with_entities(func.avg(FactAccident.severity).label("avg_severity")).one_or_none()
         avg_severity_night = night_agg.avg_severity if night_agg else None
 
-        # Average severity during day hours
         day_query = filtered_query.filter(
             (DimTime.hour >= NIGHT_END_HOUR) & (DimTime.hour < NIGHT_START_HOUR)
         )
@@ -1270,11 +1016,10 @@ def night_risk_multiplier():
         if avg_severity_day and avg_severity_night and avg_severity_day > 0:
             night_risk_multiplier = _safe_round(avg_severity_night / avg_severity_day, 2)
         elif avg_severity_night and not avg_severity_day:
-            night_risk_multiplier = _safe_round(avg_severity_night, 2) # If no day data, just return night severity
+            night_risk_multiplier = _safe_round(avg_severity_night, 2)
 
         return jsonify({
             "night_risk_multiplier": night_risk_multiplier,
-            "note": "This multiplier compares average severity during night hours (8 PM - 5 AM) to day hours. A value > 1 indicates higher night risk."
         }), 200
 
     except ProgrammingError as exc:
@@ -1286,19 +1031,12 @@ def night_risk_multiplier():
 @stats_bp.route("/visibility-risk", methods=["GET"])
 @jwt_required()
 def visibility_risk():
-    """
-    IMPORTANT — Visibility Risk.
-
-    Formula:
-      AVG(severity) grouped by visibility buckets, potentially weighted.
-      For simplicity, we'll return average severity for each visibility bucket.
-    Returns: [{visibility_bucket, avg_severity}] ordered by avg_severity desc
-    """
+    """Visibility Risk metric."""
     try:
         query = db.session.query(
             DimWeather.visibility_bucket,
             func.avg(FactAccident.severity).label("avg_severity"),
-            func.count().label("count"), # Include count to ensure enough data points
+            func.count().label("count"),
         ).select_from(FactAccident)\
          .join(DimWeather, FactAccident.weather_id == DimWeather.weather_id)\
          .join(DimTime, FactAccident.time_id == DimTime.time_id, isouter=True)\
@@ -1307,7 +1045,6 @@ def visibility_risk():
          .filter(DimWeather.visibility_bucket.isnot(None))\
          .filter(DimWeather.visibility_bucket != "Unknown")
 
-        # Apply filters manually
         years = _parse_ints("year")
         if years:
             query = query.filter(DimTime.year.in_(years))
@@ -1342,31 +1079,3 @@ def visibility_risk():
         return _handle_missing_tables(exc)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-
-
-# ─────────────────────────────────────────────────────────────
-#  BONUS KPIs (for jury / advanced) - Future Enhancements
-# ─────────────────────────────────────────────────────────────
-
-@stats_bp.route("/predicted-severity-score", methods=["GET"])
-@jwt_required()
-def predicted_severity_score():
-    """
-    BONUS — Predicted Severity Score.
-
-    This API would require a machine learning model to predict severity based on various factors.
-    This is a placeholder for future enhancement.
-    """
-    return jsonify({"message": "Predicted Severity Score API is a future enhancement and not yet implemented."}), 200
-
-
-@stats_bp.route("/global-risk-score", methods=["GET"])
-@jwt_required()
-def global_risk_score():
-    """
-    BONUS — Global Risk Score.
-
-    This API would involve a complex aggregation of multiple risk factors across different dimensions.
-    This is a placeholder for future enhancement.
-    """
-    return jsonify({"message": "Global Risk Score API is a future enhancement and not yet implemented."}), 200
