@@ -165,7 +165,7 @@ export function ETLPipelineStatus({
             fontSize: 11,
             color: "#4ade80"
           }}>
-            ✅ Datamart complet ! Prêt pour l'analyse et les prédictions ML
+            ✅ Datamart complet !
           </div>
         )}
       </div>
