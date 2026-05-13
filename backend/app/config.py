@@ -9,8 +9,8 @@ class Config:
         "DATABASE_URL",
         "postgresql://postgres:fida@localhost:5432/us_accidents_db"
     )
-    # FIX: Use a consistent strong secret key
-    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "your-super-secret-key-that-is-at-least-32-chars-long")
+    
+    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
     JWT_TOKEN_LOCATION = ["headers"]
     JWT_HEADER_NAME = "Authorization"

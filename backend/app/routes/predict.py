@@ -1,5 +1,16 @@
 """
 predict.py - API endpoints for severity prediction with filtered features
+
+Ce service :
+
+1-Reçoit les caractéristiques d'un accident (JSON depuis le frontend)
+
+2-Transforme ces données en vecteur numérique 
+
+3-Prédit la sévérité (1=Low à 4=Critical) avec le modèle Random Forest
+
+4-Retourne la prédiction + probabilités + niveau de confiance
+
 """
 
 from flask import Blueprint, request, jsonify
@@ -26,14 +37,17 @@ class OptimizedPredictor:
     DEFAULT_THRESHOLDS = {1: 0.344, 3: 0.516, 4: 0.344, 2: 'fallback'}
     
     def __init__(self, model_path: str):
+        # 1. Charge le fichier .pkl 
         data = joblib.load(model_path)
-        self.model = data['model']
-        self.feature_names = data.get('feature_names', [])
+        # 2. Extrait les composants nécessaires
+        self.model = data['model'] # La RandomForest entraînée
+        self.feature_names = data.get('feature_names', []) # Liste des 37 features
         self.keep_indices = data.get('keep_indices', None)
         self.thresholds = data.get('thresholds', self.DEFAULT_THRESHOLDS)
+        # seuils calibrés pour décider de la classe finale
         self.classes = [1, 2, 3, 4]
         
-        # Pré-calculer les mapping pour les one-hot encodings
+    
         self._init_mappings()
         
         print(f"[Predict API] ✅ Model loaded with {len(self.feature_names)} features")
@@ -67,8 +81,99 @@ class OptimizedPredictor:
         if visibility_km < 10: return 'Modérée'
         return 'Bonne'
 
+
+
     def _build_feature_vector(self, data: dict) -> np.ndarray:
-        """Build feature vector using efficient dictionary lookup"""
+        """ _build_feature_vector() - Cœur de la transformation JSON → Vecteur numérique
+        Cette fonction est le pont entre le frontend (JSON ) et le modèle ML
+(vecteur numpy de 37 features)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     PIPELINE DE TRANSFORMATION                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  JSON Frontend (Français)                                                  │
+│  {                                                                          │
+│    "duration_min": 45,      "season": "Printemps",                         │
+│    "hour": 8,               "state": "CA",                                 │
+│    "temperature_c": 22,     "weather_condition": "Clair",                  │
+│    "traffic_signal": true,  "us_region": "Ouest",                          │
+│    "crossing": false,       ...                                            │
+│  }                                                                          │
+│         ↓                                                                   │
+│  ÉTAPE 1 : Extraire les valeurs numériques                                 │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  duration_min = 45.0      month = 3.0         day_of_week = 1.0            │
+│  hour = 8.0               temperature_c = 22.0 visibility_km = 12.0        │
+│  is_weekend = 0.0 (Lundi=1 → pas weekend)                                  │
+│         ↓                                                                   │
+│  ÉTAPE 2 : Compter les infrastructures routières                           │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  ROAD_FEATURES = ['traffic_signal', 'crossing', 'junction', ...]           │
+│  road_feature_count = sum(1 for f in ROAD_FEATURES if data.get(f))         │
+│  → traffic_signal=True (+1), crossing=False (+0), junction=True (+1) = 2   │
+│         ↓                                                                   │
+│  ÉTAPE 3 : Déterminer les buckets (discrétisation)                         │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  temp_bucket = 'Chaud'     (22°C → 20-30°C)                                │
+│  vis_bucket  = 'Bonne'     (12km → ≥10km)                                  │
+│         ↓                                                                   │
+│  ÉTAPE 4 : Traduire français → anglais (pour correspondre au modèle)       │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  weather = 'Fair'          ('Clair' → 'Fair')                              │
+│  us_region = 'West'        ('Ouest' → 'West')                              │
+│         ↓                                                                   │
+│  ÉTAPE 5 : Construire le dictionnaire de lookup (one-hot encoding)         │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  lookup = {                                                                │
+│      # Numériques                                                          │
+│      'duration_min': 45.0,      'hour': 8.0,      'month': 3.0,            │
+│      'temperature_c': 22.0,     'day_of_week': 1.0, 'visibility_km': 12.0, │
+│      'is_weekend': 0.0,         'road_feature_count': 2,                   │
+│                                                                            │
+│      # Flags routiers (13 binaires)                                        │
+│      'traffic_signal': 1.0,     'crossing': 0.0,   'junction': 1.0, ...    │
+│                                                                            │
+│      # Saison (one-hot, 4 colonnes)                                        │
+│      'season_Printemps': 1.0,   'season_Été': 0.0,                         │
+│      'season_Automne': 0.0,     'season_Hiver': 0.0,                       │
+│                                                                            │
+│      # Moment de la journée (one-hot, 4 colonnes)                          │
+│      'time_of_day_Matin': 1.0,  'time_of_day_Après-midi': 0.0,             │
+│      'time_of_day_Soir': 0.0,   'time_of_day_Nuit': 0.0,                   │
+│                                                                            │
+│      # État US (one-hot, top 15 + Other)                                   │
+│      'state_CA': 1.0,          'state_TX': 0.0,    'state_Other': 0.0,     │
+│                                                                            │
+│      # Météo (one-hot, top 6)                                              │
+│      'weather_condition_Fair': 1.0, 'weather_condition_Cloudy': 0.0, ...   │
+│                                                                            │
+│      # Région US (one-hot, 4 régions)                                      │
+│      'us_region_West': 1.0,    'us_region_South': 0.0, ...                 │
+│                                                                            │
+│      # Buckets température (one-hot, 5 buckets)                            │
+│      'temp_bucket_Chaud': 1.0, 'temp_bucket_Froid': 0.0, ...               │
+│                                                                            │
+│      # Buckets visibilité (one-hot, 4 buckets)                             │
+│      'visibility_bucket_Bonne': 1.0, 'visibility_bucket_Faible': 0.0, ...  │
+│  }                                                                          │
+│         ↓                                                                   │
+│  ÉTAPE 6 : Assembler le vecteur dans l'ORDRE des features du modèle        │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  # self.feature_names = ['duration_min', 'hour', 'month',                  │
+│  #                       'season_Printemps', 'state_CA', ...] (37 noms)    │
+│  vector = [lookup.get(name, 0.0) for name in self.feature_names]           │
+│         ↓                                                                   │
+│  RÉSULTAT FINAL : Vecteur numpy (1, 37) pour sklearn                       │
+│  ─────────────────────────────────────────────────────────────────────────│
+│  array([[45.0, 8.0, 3.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, ...]],   │
+│        dtype=float32)                                                       │
+│                                                                            │
+│  Ce vecteur est ensuite passé à model.predict_proba() pour la prédiction   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+        """
         
         # ── Numeric features ──────────────────────────────────────────────
         duration_min = float(data.get('duration_min', 30.0))
@@ -181,7 +286,21 @@ class OptimizedPredictor:
         return np.array(vector, dtype=np.float32).reshape(1, -1)
 
     def predict_single(self, data: dict) -> dict:
-        """Predict severity for a single accident"""
+        """Predict severity for a single accident
+        Pourquoi des seuils calibrés ?
+
+Le modèle peut donner des probabilités comme [0.12, 0.65, 0.15, 0.08].
+La classe 2 (Moderate) a la plus haute probabilité, donc normalement on choisirait 2.
+
+Mais si on a [0.35, 0.33, 0.20, 0.12] :
+
+Classe 1 a 35% (juste au-dessus du seuil 0.344)
+
+On va choisir classe 1 même si ce n'est pas la proba max !
+
+Pourquoi ? Pour équilibrer les classes et éviter que le modèle ignore les classes rares.
+
+"""
         feature_vector = self._build_feature_vector(data)
         proba = self.model.predict_proba(feature_vector)[0]
 
@@ -211,7 +330,15 @@ class OptimizedPredictor:
 
 
 def get_predictor():
-    """Singleton loader for the optimized predictor"""
+    """Singleton loader for the optimized predictor
+    Pourquoi un singleton ?
+
+Le modèle fait ~50MB
+
+Le charger à chaque requête serait trop lent
+
+On le charge une fois au premier appel, puis on le réutilise
+    """
     global _predictor
     if _predictor is None:
         model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ml')

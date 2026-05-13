@@ -1,5 +1,35 @@
 """
 model_trainer.py - Production RF with joint threshold calibration
+
+Ce fichier contient la classe SeverityPredictor qui entraîne un modèle Random Forest avec calibration des seuils pour mieux gérer les classes déséquilibrées.
+
+Ce module améliore le modèle de base en :
+
+Équilibrant les classes (oversampling + downsampling)
+
+Calibrant les seuils de décision pour maximiser la performance sur les classes rares
+
+Validant sur un jeu de validation avant le test final
+
+Sauvegardant le modèle + préprocesseur pour l'API
+
+Distribution typique des sévérités :
+Sévérité 1 (Low)      :  8.2%   ← RARE !
+Sévérité 2 (Moderate) : 87.0%   ← TRÈS COMMUN
+Sévérité 3 (High)     :  4.3%   ← RARE
+Sévérité 4 (Critical) :  0.5%   ← TRÈS RARE
+
+# Un modèle naïf prédit toujours "Moderate" (classe 2)
+# → Accuracy = 87% (bonne apparence) mais ne prédit JAMAIS les classes 1, 3, 4
+
+olution mise en œuvre :
+
+Oversampling : Duplique les exemples rares (classes 1, 4)
+
+Class weight : Donne plus d'importance aux classes rares
+
+Seuils calibrés : Ajuste la décision pour privilégier les classes rares
+
 """
 
 import pandas as pd

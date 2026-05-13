@@ -1,13 +1,32 @@
 """
-train_model.py - Modèle de production avec filtrage par importance des features
+train_model.py 
 
-Pipeline:
-  1. Charger les données d'accidents depuis le schéma en étoile PostgreSQL
-  2. Prétraiter et encoder les variables catégorielles en one-hot
-  3. Entraîner une première RandomForest pour mesurer l'importance des features
-  4. Ne garder que les features couvrant 95% de l'importance cumulée
-  5. Réentraîner une RandomForest finale sur le jeu de features réduit
-  6. Évaluer et sauvegarder le modèle + métadonnées dans severity_model.pkl
+Ce script crée un modèle Random Forest qui prédit la sévérité d'un accident (1=Low à 4=Critical) 
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PIPELINE D'ENTRAÎNEMENT                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. CHARGE les données depuis PostgreSQL (schéma en étoile)                │
+│         ↓                                                                   │
+│  2. PRÉTRAITE : encode les catégories (one-hot), réduit la cardinalité     │
+│         ↓                                                                   │
+│  3. SPLIT : 85% entraînement, 15% test (stratifié par sévérité)           │
+│         ↓                                                                   │
+│  4. PREMIER MODÈLE : RandomForest avec 74 features                         │
+│         ↓                                                                   │
+│  5. ANALYSE D'IMPORTANCE : calcule quelles features sont utiles            │
+│         ↓                                                                   │
+│  6. FILTRAGE : garde seulement les features couvrant 95% de l'importance   │
+│         ↓                                                                   │
+│  7. SECOND MODÈLE : RandomForest avec 37 features (réduit)                 │
+│         ↓                                                                   │
+│  8. ÉVALUATION : précision, balanced accuracy, classification report       │
+│         ↓                                                                   │
+│  9. SAUVEGARDE : model.pkl + feature_importance_analysis.csv               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
 """
 
 import sys

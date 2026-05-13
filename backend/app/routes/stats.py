@@ -56,10 +56,7 @@ MONTH_NAMES = [
 
 SEVERITY_LABELS = {1: "Low", 2: "Moderate", 3: "High", 4: "Critical"}
 
-DAY_ORDER = {
-    "Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
-    "Friday": 4, "Saturday": 5, "Sunday": 6,
-}
+
 
 # ─────────────────────────────────────────────────────────────
 #  SHARED HELPERS
@@ -99,19 +96,20 @@ def _apply_filters_to_query(query, include_year: bool = True):
     Apply all active query-string filters to a query that already has
     FactAccident, DimTime, and DimLocation joined.
     """
+    # Filtre par année (?year=2021,2022)
     if include_year:
         years = _parse_ints("year")
         if years:
             query = query.filter(DimTime.year.in_(years))
-
+# Filtre par sévérité (?severity=2,3)
     severities = _parse_ints("severity")
     if severities:
         query = query.filter(FactAccident.severity.in_(severities))
-
+# Filtre par état (?state=CA,TX)
     states = _parse_strings("state")
     if states:
         query = query.filter(DimLocation.state.in_(states))
-
+   # Filtre par mois (?month=1,2,3)
     months = _parse_ints("month")
     if months:
         query = query.filter(DimTime.month.in_(months))
@@ -124,10 +122,10 @@ def _base_query():
     FactAccident left-joined to all four dimensions.
     """
     return (
-        db.session.query(FactAccident)
+        db.session.query(FactAccident) # ← Table des accidents
         .select_from(FactAccident)
-        .join(DimTime, FactAccident.time_id == DimTime.time_id)
-        .join(DimLocation, FactAccident.location_id == DimLocation.location_id)
+        .join(DimTime, FactAccident.time_id == DimTime.time_id) # ← Jointure avec le temps
+        .join(DimLocation, FactAccident.location_id == DimLocation.location_id) # ← Jointure avec la localisation
         .join(DimWeather, FactAccident.weather_id == DimWeather.weather_id, isouter=True)
         .join(DimRoad, FactAccident.road_id == DimRoad.road_id, isouter=True)
     )
@@ -163,17 +161,19 @@ def _all_years_list() -> list[int]:
 def overview():
     """KPI 1 — Total accidents headline card."""
     try:
+        # 1. Compte total des accidents (avec filtres)
         total = _apply_filters_to_query(_base_query()).count()
 
         query = _base_query()
+         # 2. Moyenne de sévérité et durée (avec filtres)
         query = _apply_filters_to_query(query)
         agg_row = query.with_entities(
             func.avg(FactAccident.severity).label("avg_severity"),
             func.avg(FactAccident.duration_min).label("avg_duration"),
         ).one_or_none()
-
+        # 3. Toutes les années (sans filtres )
         all_years = _all_years_list()
-
+# 4. Répartition par sévérité 
         sev_query = _base_query()
         sev_query = _apply_filters_to_query(sev_query)
         sev_rows = sev_query.with_entities(
@@ -495,7 +495,7 @@ def map_points():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 5 — BY WEATHER
+#  KPI 5 — BY WEATHER , IMPACT OF WEATHER CONDITIONS
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-weather", methods=["GET"])
@@ -556,7 +556,7 @@ def by_weather():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 7 — BY HOUR
+#  KPI 7 — BY HOUR ; PEAK HOUR HEATMAP
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-hour", methods=["GET"])
@@ -627,7 +627,7 @@ def by_hour():
 
 
 # ─────────────────────────────────────────────────────────────
-#  KPI 9 — BY ENV BUCKET
+#  KPI 9 — BY ENV BUCKET , TEMPERATURE AND VISIBILITY BUCKET BREAKDOWN
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/by-env-bucket", methods=["GET"])
@@ -743,7 +743,7 @@ def by_env_bucket():
 
 
 # ─────────────────────────────────────────────────────────────
-#  UTILITY — FILTER OPTIONS
+#  UTILITY — FILTER OPTIONS , ALL AVAILABLE YEARS, STATES, MONTHS FOR THE UI
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/filter-options", methods=["GET"])
@@ -793,7 +793,7 @@ def filter_options():
 
 
 # ─────────────────────────────────────────────────────────────
-#  ADDITIONAL METRICS (USED BY DASHBOARD)
+#  Moyenne durée
 # ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/avg-duration", methods=["GET"])
@@ -816,6 +816,9 @@ def avg_duration():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
+# ─────────────────────────────────────────────────────────────
+#  Moyenne durée par sévérité haute
+# ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/high-severity-rate", methods=["GET"])
 @jwt_required()
@@ -838,6 +841,10 @@ def high_severity_rate():
         return _handle_missing_tables(exc)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+# ─────────────────────────────────────────────────────────────
+#  severite moyenne par caracteristique de la route
+# ─────────────────────────────────────────────────────────────
 
 
 @stats_bp.route("/severity-by-road-feature", methods=["GET"])
@@ -896,6 +903,15 @@ def severity_by_road_feature():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
+# ─────────────────────────────────────────────────────────────
+#  Calcule la gravité moyenne de tous les accidents (avec les filtres actifs).
+# Formule :risk_multiplier = (Severity 1 + Severity 2 + ... + Severity N) / N
+
+# Imaginons 5 accidents avec ces sévérités : Accident 1: Sévérité 2, Accident 2: Sévérité 3 ,Accident 3: Sévérité 1 , Accident 4: Sévérité 4 , Accident 5: Sévérité 2
+# risk_multiplier : (2 + 3 + 1 + 4 + 2) / 5 = 2.4
+#Interprétation : 1.0 → 1.5 : Risque faible 🟢  1.5 → 2.5 : Risque modéré 🟡  2.5 → 3.5 : Risque élevé 🟠 ,3.5 → 4.0 : Risque critique 🔴
+
+# ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/risk-multiplier", methods=["GET"])
 @jwt_required()
@@ -919,7 +935,9 @@ def risk_multiplier():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
-
+# ─────────────────────────────────────────────────────────────
+#  Il calcule la sévérité moyenne uniquement pour les accidents qui ont lieu dans les heures de pointe (par exemple, 7h-9h et 16h-18h) et les jours de semaine.
+# ─────────────────────────────────────────────────────────────
 @stats_bp.route("/rush-hour-severity-index", methods=["GET"])
 @jwt_required()
 def rush_hour_severity_index():
@@ -957,6 +975,12 @@ def rush_hour_severity_index():
         return jsonify({"error": str(exc)}), 500
 
 
+
+# ─────────────────────────────────────────────────────────────
+#  Moyenne durée par sévérité 
+# ─────────────────────────────────────────────────────────────
+
+
 @stats_bp.route("/duration-by-severity", methods=["GET"])
 @jwt_required()
 def duration_by_severity():
@@ -988,6 +1012,9 @@ def duration_by_severity():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
+# ─────────────────────────────────────────────────────────────
+#  Comparer la gravité la nuit vs la gravité le jour pour voir si la nuit est plus risquée.
+# ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/night-risk-multiplier", methods=["GET"])
 @jwt_required()
@@ -1027,6 +1054,10 @@ def night_risk_multiplier():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
+
+# ─────────────────────────────────────────────────────────────
+#  Visibility Risk metric
+# ─────────────────────────────────────────────────────────────
 
 @stats_bp.route("/visibility-risk", methods=["GET"])
 @jwt_required()

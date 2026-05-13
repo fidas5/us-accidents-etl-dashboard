@@ -1,20 +1,58 @@
-from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from flask_jwt_extended import JWTManager
-from sqlalchemy import text
-from flask_cors import CORS
-from flask_mail import Mail
-from sqlalchemy import inspect
+"""
+Ce fichier :
 
-from .config import Config
+Crée l'application Flask
 
-db = SQLAlchemy()   # instance SQLAlchemy
+Configure les extensions (SQLAlchemy, JWT, CORS, Mail)
+
+Initialise la base de données
+
+Enregistre les blueprints (routes)
+
+Ajoute un endpoint de santé (health check)
+
+"""
+
+from flask import Flask   # Le framework web principal
+from flask_sqlalchemy import SQLAlchemy # ORM pour la base de données
+from flask_migrate import Migrate  # Gère les migrations (changements de modele de la base de données)
+from flask_jwt_extended import JWTManager # Gère les tokens JWT
+from sqlalchemy import text  # Permet d'écrire du SQL brut
+from flask_cors import CORS  # Gère le partage entre frontend/backend
+from flask_mail import Mail # Envoie des emails
+from sqlalchemy import inspect # Inspecte la structure de la base de données
+
+from .config import Config   # Configuration (variables d'environnement)
+
+"""
+Pourquoi les créer avant l'application ?
+
+Ces objets sont des singletons (une seule instance partagée)
+
+Ils seront "liés" à l'application quand elle sera créée
+
+Cela permet de les réutiliser dans d'autres fichiers (ex: from app import db)
+
+"""
+db = SQLAlchemy()  
 migrate = Migrate()
 jwt = JWTManager()
 mail = Mail()
 
+"""
+Fonction create_app() - Factory pattern
+Qu'est-ce que le Factory Pattern ?
+Au lieu de créer l'application globalement, on utilise une fonction qui la fabrique (d'où le nom "factory").
 
+
+Avantages :
+
+On peut créer plusieurs applications (ex: pour les tests)
+
+Meilleure organisation du code
+
+Évite les problèmes d'imports circulaires
+"""
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -59,7 +97,7 @@ def create_app():
     app.register_blueprint(predict_bp, url_prefix="/api/predict")
 
 
-    # ── 5. Health check ─────────────────────────────────3- no its first time to integrate but already exists in my local pc i used it in another project ───────────────────
+    # ── 5. Health check ─────────────────────────────────
     @app.route("/health")
     def health():
         try:

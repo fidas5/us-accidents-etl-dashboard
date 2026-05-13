@@ -1,4 +1,71 @@
-from flask import Blueprint, request, jsonify , current_app
+"""
+📦 IMPORTS - Bibliothèques et modules utilisés dans ce fichier
+
+Ce fichier d'authentification utilise plusieurs bibliothèques pour :
+- Créer des routes API (Blueprint)
+- Sécuriser les mots de passe (werkzeug)
+- Gérer les tokens JWT (flask_jwt_extended)
+- Envoyer des emails (flask_mail)
+- Manipuler les dates et générer des codes (random, datetime)
+- Valider les emails (re)
+- Logger les événements (logging)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           FLASK (Framework Web)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Blueprint  → Organiser les routes en modules (ex: /auth/login)             │
+│ request    → Lire les données envoyées par le frontend (JSON, form)        │
+│ jsonify    → Convertir les dictionnaires Python en réponse JSON            │
+│ current_app→ Accéder à l'application Flask (config, extensions)            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SÉCURITÉ & AUTHENTIFICATION                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ generate_password_hash  → Transformer un mot de passe en hash (chiffré)    │
+│ check_password_hash     → Vérifier si un mot de passe correspond au hash   │
+│ create_access_token     → Générer un token JWT pour l'authentification     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              EMAILS (Notifications)                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Message   → Créer un email (sujet, destinataire, contenu)                  │
+│ mail      → Instance Flask-Mail pour envoyer l'email                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           UTILITAIRES PYTHON                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ random    → Générer des codes aléatoires (vérification email)              │
+│ datetime  → Manipuler les dates (expiration des codes)                     │
+│ timedelta → Ajouter/soustraire du temps (ex: +15 minutes)                  │
+│ re        → Expressions régulières (validation format email)               │
+│ logging   → Enregistrer des logs pour le débogage                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          PROJET (Modules internes)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ db    → Instance SQLAlchemy (connexion base de données)                    │
+│ mail  → Instance Flask-Mail (envoi d'emails)                               │
+│ User  → Modèle SQLAlchemy (table users en base de données)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+"""
+
+from flask import Blueprint, request, jsonify, current_app
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_jwt_extended import create_access_token
+from flask_mail import Message
+import random
+from datetime import datetime, timedelta
+from .. import db, mail
+from ..models import User
+import re
+import logging
+
+from flask import Blueprint, request, jsonify , current_app   
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token
 from flask_mail import Message
@@ -12,9 +79,6 @@ import logging
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-# ──────────────────────────────────────────────────────────────────
-# 1. Validation helpers
-# ──────────────────────────────────────────────────────────────────
 
 
 def validate_email(email: str) -> bool:

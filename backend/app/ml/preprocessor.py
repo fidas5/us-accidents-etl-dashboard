@@ -1,6 +1,9 @@
 """
 preprocessor.py - Feature engineering for accident severity prediction
-Goal : Transform raw accident data → ML-ready numerical matrix
+Ce fichier contient la classe AccidentPreprocessor qui transforme les données
+d'accidents en une matrice numérique prête pour l'entraînement du modèle.
+
+
 """
 
 import pandas as pd
